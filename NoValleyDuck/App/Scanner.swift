@@ -9,11 +9,18 @@ private let tagLog = Logger(subsystem: "com.novalleyduck.NoValleyDuck", category
 @Observable
 @MainActor
 final class Scanner {
+    static let shared = Scanner()
+
     @ObservationIgnored let camera = CameraService()
     private(set) var detections: [TagDetection] = []
     private(set) var frameSize: CGSize = .zero
     private(set) var status = "Starting camera…"
+    var siriMessage: String?
+    private(set) var isNavigating = false
+    private(set) var destinationLabel: String?
     @ObservationIgnored private var started = false
+    @ObservationIgnored private let navigationGuide = NavigationGuide()
+    @ObservationIgnored private let navigationService = NavigationService()
 
     func start() async {
         guard !started else { return }
@@ -42,12 +49,49 @@ final class Scanner {
                 """)
             }
             Task { @MainActor [weak self] in
-                self?.detections = dets
-                self?.frameSize = size
+                guard let self else { return }
+                self.detections = dets
+                self.frameSize = size
+                if self.isNavigating {
+                    let markerSizeCm = UserDefaults.standard.double(forKey: "markerSizeCm")
+                    self.navigationGuide.announce(
+                        for: dets,
+                        frameSize: size,
+                        markerSizeCm: markerSizeCm == 0 ? 16.3 : markerSizeCm
+                    )
+                }
             }
         }
         camera.start()
         status = "Scanning for tag25h9"
         tagLog.info("Camera started, scanning for tag25h9")
+    }
+
+    func startNavigating(destination: String) {
+        guard !isNavigating else { return }
+        isNavigating = true
+        destinationLabel = destination.isEmpty ? nil : destination
+        navigationGuide.start(destination: destinationLabel)
+        if let destinationLabel {
+            Task { await planTrip(to: destinationLabel) }
+        }
+    }
+
+    func stopNavigating() {
+        guard isNavigating else { return }
+        isNavigating = false
+        destinationLabel = nil
+        navigationGuide.stop()
+    }
+
+    private func planTrip(to destination: String) async {
+        do {
+            let plan = try await navigationService.plan(to: destination)
+            guard isNavigating else { return }
+            navigationGuide.say("Route to \(plan.destination.spokenName) found. \(plan.spokenSummary)")
+        } catch {
+            guard isNavigating else { return }
+            navigationGuide.say(error.localizedDescription)
+        }
     }
 }
