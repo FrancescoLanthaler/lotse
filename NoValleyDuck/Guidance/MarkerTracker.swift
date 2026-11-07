@@ -11,6 +11,8 @@ import QuartzCore
 final class MarkerTracker {
     private var history: [[Int]] = []
     private(set) var locked: Int?
+    /// IDs that passed all four checks in the latest frame's history (check 4 included).
+    private(set) var confirmed: Set<Int> = []
     private var lastSeen: CFTimeInterval = 0
     var minMargin: Float = 40
     let window = 5, needed = 3, lostAfter: CFTimeInterval = 1.5
@@ -24,7 +26,7 @@ final class MarkerTracker {
         let good = dets.filter { passesQuality($0) && validIds.contains($0.id) }
         history.append(good.map(\.id))
         if history.count > window { history.removeFirst() }
-        let confirmed = confirmedIds()
+        confirmed = confirmedIds()
 
         // Switch to the preferred marker (e.g. the requested line's bus door) once it is
         // confirmed, even while locked on something else.
@@ -45,7 +47,7 @@ final class MarkerTracker {
         return d
     }
 
-    func reset() { history.removeAll(); locked = nil }
+    func reset() { history.removeAll(); locked = nil; confirmed = [] }
 
     private func confirmedIds() -> Set<Int> {
         var counts: [Int: Int] = [:]

@@ -45,10 +45,16 @@ struct Marker: Codable, Identifiable, Hashable, Sendable {
     let bay: String           // bay record id, "" if none
     let vehicleLine: String   // for kind == .vehicle
     let sizeM: Double         // outer black square edge in metres, measured after printing
+    /// Where the bay's waiting spot is, seen from in front of the marker: metres to the marker's
+    /// right and metres out from its face. Measured with a tape when the marker goes up.
+    /// Not in PocketBase yet, so `WaitingSpot.offsets` hard-codes them for the test stop.
+    var spotRightM: Double? = nil
+    var spotOutM: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, stop, kind, bay
         case tagId = "tag_id", vehicleLine = "vehicle_line", sizeM = "size_m"
+        case spotRightM = "spot_right_m", spotOutM = "spot_out_m"
     }
 }
 

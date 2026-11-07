@@ -22,6 +22,7 @@ struct FrameResult: Sendable, Equatable {
     let frame: FrameInfo
     let lockedTag: Int?        // tracker lock, also during short dropouts
     let lock: LockedMarker?    // locked marker if visible in this frame
+    var confirmed: Set<Int> = []   // IDs that passed the full safety filter (3 of 5 frames)
 }
 
 
@@ -65,6 +66,7 @@ final class FrameProcessor: @unchecked Sendable {
             }
             return ClassifiedDetection(detection: d, status: status, marker: marker, guidance: g)
         }
-        return FrameResult(detections: classified, frame: frame, lockedTag: tracker.locked, lock: lock)
+        return FrameResult(detections: classified, frame: frame, lockedTag: tracker.locked, lock: lock,
+                           confirmed: tracker.confirmed)
     }
 }

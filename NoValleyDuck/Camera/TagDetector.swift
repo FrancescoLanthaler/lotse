@@ -9,6 +9,9 @@ struct TagDetection: Sendable, Equatable {
     let corners: [CGPoint]
     let unitTranslation: SIMD3<Double>?   // multiply by marker size in metres
     let poseError: Double?
+    /// Tag→camera rotation, row-major. Maps the tag frame (x right, y down, z into the tag) into
+    /// the camera frame, so a point p on the tag is at `R·p + t`. nil without pose.
+    var rotation: [Double]? = nil
     /// Straight-line distance camera → marker centre in metres, from the pose.
     func distance(markerSize: Double) -> Double? {
         unitTranslation.map { ($0 * $0).sum().squareRoot() * markerSize }
@@ -46,7 +49,8 @@ final class TagDetector {
                 center: CGPoint(x: d.center_x, y: d.center_y),
                 corners: stride(from: 0, to: 8, by: 2).map { CGPoint(x: c[$0], y: c[$0 + 1]) },
                 unitTranslation: d.has_pose == 1 ? SIMD3(d.tx, d.ty, d.tz) : nil,
-                poseError: d.has_pose == 1 ? d.pose_error : nil)
+                poseError: d.has_pose == 1 ? d.pose_error : nil,
+                rotation: d.has_pose == 1 ? withUnsafeBytes(of: d.r) { Array($0.bindMemory(to: Double.self)) } : nil)
         }
     }
 }

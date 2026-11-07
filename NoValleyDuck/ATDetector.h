@@ -10,6 +10,7 @@ typedef struct {
     double corners[8];       // x0,y0,...,x3,y3 in pixels
     int    has_pose;
     double tx, ty, tz;       // translation for tag size 1.0 (scale in Swift)
+    double r[9];             // tag→camera rotation, row-major (tag x right, y down, z into the tag)
     double pose_error;
 } at_detection;
 

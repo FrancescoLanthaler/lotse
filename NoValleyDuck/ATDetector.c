@@ -45,6 +45,7 @@ int at_detect(void *ctx, const uint8_t *gray, int width, int height, int stride,
             apriltag_pose_t pose;
             o->pose_error = estimate_tag_pose(&info, &pose);
             o->tx = MATD_EL(pose.t, 0, 0); o->ty = MATD_EL(pose.t, 1, 0); o->tz = MATD_EL(pose.t, 2, 0);
+            for (int j = 0; j < 9; j++) o->r[j] = MATD_EL(pose.R, j / 3, j % 3);
             o->has_pose = 1;
             matd_destroy(pose.R); matd_destroy(pose.t);
         }
