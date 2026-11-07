@@ -17,15 +17,15 @@ This is a hackathon project (Tourism Hackathon 2026), with a real field test on 
 ## Repo layout
 
 ```
+AGENTS.md / CLAUDE.md           agent instructions (CLAUDE.md just imports this file)
 SPEC.md                         product spec (source of truth)
-novalleyduck/
-  NoValleyDuck.xcodeproj        Xcode project, one target + scheme: NoValleyDuck
-  NoValleyDuck/
-    App/                        app entry (NoValleyDuckApp.swift), Scanner (camera → tag detections)
-    Camera/                     CameraService (AVFoundation, 1080p, 10 fps), TagDetector (Swift wrapper), CameraPreview (debug overlay)
-    ATDetector.c/.h             C glue around the AprilTag library (tag25h9 + pose)
-    ThirdParty/apriltag/        vendored AprilTag C library: do not modify
-    NoValleyDuck-Bridging-Header.h
+NoValleyDuck.xcodeproj          Xcode project, one target + scheme: NoValleyDuck
+NoValleyDuck/
+  App/                          app entry (NoValleyDuckApp.swift), Scanner (camera → tag detections)
+  Camera/                       CameraService (AVFoundation, 1080p, 10 fps), TagDetector (Swift wrapper), CameraPreview (debug overlay)
+  ATDetector.c/.h               C glue around the AprilTag library (tag25h9 + pose)
+  ThirdParty/apriltag/          vendored AprilTag C library: do not modify
+  NoValleyDuck-Bridging-Header.h
 data/                           (planned) Salzburg transit data from a teammate
 ```
 
@@ -61,11 +61,16 @@ Camera, AirPods head tracking, GPS and haptics need a **real iPhone**. The simul
 Compile check from the command line (signing is off, so it works on any machine; it does not install anything):
 
 ```bash
-cd novalleyduck && xcodebuild -project NoValleyDuck.xcodeproj -scheme NoValleyDuck -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project NoValleyDuck.xcodeproj -scheme NoValleyDuck -destination 'generic/platform=iOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
-To run on a device, open `novalleyduck/NoValleyDuck.xcodeproj` in Xcode, pick the phone and press Run. Signing uses the team already set in the project. Tag detections are logged under the `tags` category, so filter the Xcode console or Console.app by `com.novalleyduck.NoValleyDuck`.
+To run on a device, open `NoValleyDuck.xcodeproj` in Xcode, pick the phone and press Run. Signing uses the team already set in the project. Tag detections are logged under the `tags` category, so filter the Xcode console or Console.app by `com.novalleyduck.NoValleyDuck`.
 
 ## Git
 
-No repo is initialised yet. Once it is: small commits, one feature per commit, and never commit `DerivedData/`, `xcuserdata/` or secrets (PocketBase admin credentials stay out of the repo).
+Repo: `github.com/FrancescoLanthaler/novalleyduck`, default branch `main`.
+
+- Several people push to the same repo tonight: pull before you start, keep commits small (one feature per commit) and push often to keep merge conflicts small.
+- Commit messages follow the existing style: `feat: …`, `fix: …`, short and in English.
+- `project.pbxproj` conflicts are the most painful kind. Avoid touching build settings unless needed, and tell the team when you do.
+- Never commit `DerivedData/`, `xcuserdata/` (already in `.gitignore`) or secrets. PocketBase admin credentials stay out of the repo.
