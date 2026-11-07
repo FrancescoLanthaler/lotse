@@ -11,7 +11,7 @@ struct Checkpoint: Equatable {
 enum RouteGeometry {
     static let spacing = 25.0             // SPEC: checkpoints at turns and roughly every 20–30 m
 
-    /// Checkpoints at the turns of `leg` and every `spacing` metres, always ending at the leg's end.
+    /// Checkpoints at the turns of `leg` and every `spacing` metres, always ending at the leg's target.
     static func checkpoints(for leg: WalkingLeg, spacing: Double = spacing) -> [Checkpoint] {
         let path = leg.path.count >= 2 ? leg.path : [leg.from.coordinate, leg.to.coordinate]
         let cum = cumulative(path)
@@ -38,7 +38,8 @@ enum RouteGeometry {
         }
         stations.sort { $0.s < $1.s }
         return stations.map { Checkpoint(coordinate: point(at: $0.s, path: path, cum: cum), turn: $0.turn) }
-            + [Checkpoint(coordinate: path.last!, turn: nil)]
+            // The real target (stop, bay or destination), not the end of MapKit's road-snapped line.
+            + [Checkpoint(coordinate: leg.to.coordinate, turn: nil)]
     }
 
     /// "left" / "right" with "slight" or "sharp", nil when the path goes on roughly straight.
