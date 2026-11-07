@@ -4,5 +4,6 @@ DerivedData/
 build/
 *.xcuserstate
 .swiftpm/
-_specs/
 .idea/
+_specs/__pycache__/
+*.pyc
