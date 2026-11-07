@@ -38,12 +38,16 @@ final class MarkerPipeline {
         didSet { let m = minMargin; let p = processor; camera.onFrameQueue { p.tracker.minMargin = m } }
     }
     /// Flip if left/right comes out reversed in the direction test.
-    var lateralFlipped = UserDefaults.standard.bool(forKey: "lateralFlipped") {
+    var lateralFlipped = UserDefaults.standard.bool(forKey: "lateralFlipped.v2") {
         didSet {
-            UserDefaults.standard.set(lateralFlipped, forKey: "lateralFlipped")
-            let s: Double = lateralFlipped ? -1 : 1; let p = processor
+            UserDefaults.standard.set(lateralFlipped, forKey: "lateralFlipped.v2")
+            let s = lateralSign; let p = processor
             camera.onFrameQueue { p.engine.lateralSign = s }
         }
+    }
+
+    private var lateralSign: Double {
+        lateralFlipped ? -GuidanceEngine.portraitLateralSign : GuidanceEngine.portraitLateralSign
     }
 
     @ObservationIgnored let camera = CameraService()
@@ -72,7 +76,7 @@ final class MarkerPipeline {
         guard !started else { return }
         started = true
 
-        let s: Double = lateralFlipped ? -1 : 1; let p = processor
+        let s = lateralSign; let p = processor
         camera.onFrameQueue { p.engine.lateralSign = s }
 
         location.onChange = { [weak self] ctx in self?.stopChanged(ctx) }

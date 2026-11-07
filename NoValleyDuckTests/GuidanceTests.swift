@@ -31,6 +31,18 @@ struct GuidanceTests {
         #expect(abs(flipped.bearingDeg + 45) < 1e-9)
     }
 
+    @Test func portraitDefaultMeansRightIsPositive() {
+        // Held in portrait, a marker to the phone's right sits near the TOP of the landscape
+        // frame (small y): negative t.y with pose, centre above the middle without pose.
+        let size = CGSize(width: 1920, height: 1080)
+        let e = GuidanceEngine()
+        let withPose = e.update(det(0, cy: 200, t: SIMD3(0, -3, 10)), markerSize: 1, fx: 1500, fy: 1500, imageSize: size)
+        #expect(withPose.bearingDeg > 15 && withPose.clockHour == 1)
+        let noPose = GuidanceEngine.measure(det(0, cy: 200, t: nil), markerSize: 1, fx: 1500, fy: 1500,
+                                            imageSize: size, lateralSign: e.lateralSign)
+        #expect(noPose.bearingDeg > 0)
+    }
+
     @Test func fallbackWithoutPose() {
         let g = GuidanceEngine.measure(det(0, side: 150, t: nil), markerSize: 0.2, fx: 1500, fy: 1500,
                                        imageSize: CGSize(width: 1920, height: 1080), lateralSign: 1)

@@ -21,9 +21,12 @@ struct Guidance: Sendable, Equatable {
 
 /// Turns a locked detection into smoothed distance + bearing. Frame-queue only.
 final class GuidanceEngine {
-    /// Frames are in sensor (landscape) orientation; held in portrait, the rider's left/right
-    /// is the frame's y axis. Flip to -1 if left/right comes out reversed (spec direction test).
-    var lateralSign: Double = 1
+    /// Frames are in the back camera's native landscape orientation (home button right). Held in
+    /// portrait, the top of the frame (small y) is the phone's RIGHT side, so a marker to the
+    /// right has negative t.y. -1 turns that into "+ = right". The debug toggle flips it if a
+    /// device ever disagrees (spec direction test).
+    static let portraitLateralSign: Double = -1
+    var lateralSign: Double = GuidanceEngine.portraitLateralSign
     let alpha = 0.3
     private var d: Double?, th: Double?
 
