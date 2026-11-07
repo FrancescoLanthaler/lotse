@@ -17,9 +17,12 @@ final class Scanner {
     @ObservationIgnored private let navigationService = NavigationService()
 
     var detections: [TagDetection] { pipeline.lastFrame?.detections.map(\.detection) ?? [] }
+    /// When the latest camera frame arrived (MarkerBeacon drops stale frames).
+    private(set) var lastFrame = Date.distantPast
     var status: String { pipeline.cameraError ?? "Scanning for tag25h9" }
 
     func frameUpdated(_ frame: FrameResult?) {
+        lastFrame = Date()
         guard isNavigating, let frame else { return }
         // Only IDs that passed the safety filter may be spoken.
         let safe = frame.detections.filter { $0.status == .locked }.map(\.detection)

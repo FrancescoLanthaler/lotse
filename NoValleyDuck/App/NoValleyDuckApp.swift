@@ -52,6 +52,7 @@ struct NoValleyDuckApp: App {
                         .onTapGesture { scanner.siriMessage = nil }
                 }
             }
+            .modifier(MarkerGuidance(scanner: scanner))
             .sheet(isPresented: $showRouteTest) { NavigationDebugView() }
             .onChange(of: scanner.pipeline.lastFrame) { _, frame in scanner.frameUpdated(frame) }
             .task {
