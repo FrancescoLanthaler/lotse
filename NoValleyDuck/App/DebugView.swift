@@ -75,6 +75,16 @@ struct DebugView: View {
                 set: { pipeline.location.setDemoOverride($0) }))
             Toggle("Flip left/right", isOn: $pipeline.lateralFlipped)
             Stepper("Min margin: \(Int(pipeline.minMargin))", value: $pipeline.minMargin, in: 0...200, step: 5)
+            HStack {
+                Toggle(pipeline.recordingURL == nil ? "Record hall test (CSV)"
+                           : "Recording… locks: \(pipeline.recordedLocks)",
+                       isOn: Binding(get: { pipeline.recordingURL != nil },
+                                     set: { pipeline.setRecording($0) }))
+                if pipeline.recordingURL == nil, let last = pipeline.recordings.first {
+                    ShareLink(item: last) { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel("Share last hall test CSV")
+                }
+            }
         }
         .padding(10)
         .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))

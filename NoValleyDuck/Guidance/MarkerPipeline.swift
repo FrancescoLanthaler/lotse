@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Observation
+import UIKit
 import os
 
 private let log = Logger(subsystem: "com.novalleyduck.NoValleyDuck", category: "markers")
@@ -21,6 +22,10 @@ final class MarkerPipeline {
     private(set) var reducedRange = false
     private(set) var lastFrame: FrameResult?
     private(set) var cameraError: String?
+    /// Hall-test CSV currently being written, and how many locks happened during it
+    /// (false-positive test: must stay 0 with no demo markers in view).
+    private(set) var recordingURL: URL?
+    private(set) var recordedLocks = 0
 
     let location: LocationGate
     var stop: StopContext? { location.context }
@@ -43,6 +48,7 @@ final class MarkerPipeline {
 
     @ObservationIgnored let camera = CameraService()
     @ObservationIgnored private let processor = FrameProcessor()
+    @ObservationIgnored private let recorder = HallTestRecorder()
     @ObservationIgnored let repository: StopRepository
     @ObservationIgnored private var machine = MarkerStateMachine()
     @ObservationIgnored private var catalog = MarkerCatalog.empty
@@ -86,16 +92,42 @@ final class MarkerPipeline {
             log.error("camera setup failed: \(error.localizedDescription)")
             return
         }
-        let processor = processor
+        let processor = processor, recorder = recorder
         camera.onFrame = { [weak self] dets, frame in
             let result = processor.process(dets, frame: frame)
+            recorder.write(result, stop: processor.catalog.stop?.stop.name ?? "")
             for d in dets {
                 log.debug("tag \(d.id) ham=\(d.hamming) margin=\(d.margin, format: .fixed(precision: 1)) side=\(d.sidePixels, format: .fixed(precision: 0))px")
             }
             Task { @MainActor [weak self] in self?.handle(result) }
         }
         camera.start()
+        // Spec: keep scanning with the screen curtain on / phone in a pocket-free hold.
+        UIApplication.shared.isIdleTimerDisabled = true
         log.info("marker pipeline started")
+    }
+
+    // MARK: - Hall test recording
+
+    func setRecording(_ on: Bool) {
+        let recorder = recorder
+        if on {
+            let url = HallTestRecorder.newURL()
+            camera.onFrameQueue { recorder.begin(url) }
+            recordingURL = url
+            recordedLocks = 0
+        } else {
+            camera.onFrameQueue { recorder.end() }
+            recordingURL = nil
+        }
+    }
+
+    /// Finished and running recordings, newest first.
+    var recordings: [URL] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: URL.documentsDirectory,
+                                                                  includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.lastPathComponent.hasPrefix("hall-test-") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
     }
 
     // MARK: - Frame results (main actor)
@@ -131,6 +163,7 @@ final class MarkerPipeline {
     }
 
     private func emit(_ e: MarkerEvent) {
+        if case .found = e, recordingURL != nil { recordedLocks += 1 }
         log.info("event: \(String(describing: e), privacy: .public)")
         subscribers.values.forEach { $0.yield(e) }
     }

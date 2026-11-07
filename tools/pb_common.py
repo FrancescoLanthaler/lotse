@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 PB_URL = os.environ.get("PB_URL", "https://novalleyduck.novafox.at").rstrip("/")
@@ -55,6 +56,21 @@ class PocketBase:
             if e.status == 404:
                 return None
             raise
+
+    def list_all(self, collection, filter=None, expand=None):
+        """Every record of a collection (optionally filtered), following pagination."""
+        out, page = [], 1
+        while True:
+            q = {"page": page, "perPage": 500, "skipTotal": 1}
+            if filter:
+                q["filter"] = filter
+            if expand:
+                q["expand"] = expand
+            r = self.request("GET", f"/api/collections/{collection}/records?" + urllib.parse.urlencode(q))
+            out += r["items"]
+            if len(r["items"]) < 500:
+                return out
+            page += 1
 
     def batch_upsert(self, collection, records, chunk=100):
         """Upsert records (each with an explicit 15-char id) through the batch API."""

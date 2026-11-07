@@ -46,7 +46,7 @@ TZ = ZoneInfo("Europe/Vienna")
 DEMO_AREA = "at:45:50002"
 DEMO_BAY_TAGS = {"A": 0, "B": 1}          # platform code -> tag25h9 id
 DEMO_VEHICLE_TAG = 25                     # bus-door marker
-DEMO_MARKER_SIZE_M = 0.163                # A4 print; measure after printing and update
+DEMO_MARKER_SIZE_M = 0.145                # tools/make_markers.py on A4; measure + assign_marker.py
 
 OSM_MATCH_M = 20
 OVERPASS = "https://overpass-api.de/api/interpreter"
@@ -269,6 +269,9 @@ def demo_seed(stops, bays):
 
 
 def reset(pb):
+    """Wipe imported data. Returns the markers that existed, so they can be restored: marker
+    assignments and measured sizes are hand-made and must survive a re-import."""
+    saved = pb.list_all("markers")
     for name in ("timetables", "markers", "bays", "stops"):
         pb.request("DELETE", f"/api/collections/{name}/truncate")
         print(f"truncated {name}")
@@ -282,6 +285,23 @@ def reset(pb):
                 {"method": "DELETE", "url": f"/api/collections/facts/records/{f['id']}"}
                 for f in r["items"][i:i + 100]]})
     print("deleted imported facts")
+    keep = ("id", "stop", "tag_id", "kind", "bay", "vehicle_line", "size_m", "note")
+    return [{k: m[k] for k in keep} for m in saved]
+
+
+def write_demo_files(stop, bays, markers, timetable=None):
+    """Bundled offline fallback for the demo stop (NoValleyDuck/Data/*.json)."""
+    with open(os.path.join(DATA_DIR, "DemoStop.json"), "w") as f:
+        json.dump({"stop": stop, "bays": bays, "markers": markers}, f, indent=1, ensure_ascii=False)
+    if timetable is not None:
+        with open(os.path.join(DATA_DIR, "DemoTimetable.json"), "w") as f:
+            json.dump(timetable, f, ensure_ascii=False, separators=(",", ":"))
+
+
+def demo_markers_from_server(pb, stop_id):
+    keep = ("id", "stop", "tag_id", "kind", "bay", "vehicle_line", "size_m", "note")
+    ms = pb.list_all("markers", filter=f'stop = "{stop_id}" || kind = "vehicle"')
+    return [{k: m[k] for k in keep} for m in sorted(ms, key=lambda m: m["tag_id"])]
 
 
 def main():
@@ -315,23 +335,27 @@ def main():
         f"{b['label'] or '?'} [{' '.join(b['lines'][:6])}]" for b in demo_bays))
 
     demo_tt = next((t for t in timetables if t["stop"] == demo_stop["id"]), None)
-    with open(os.path.join(DATA_DIR, "DemoStop.json"), "w") as f:
-        json.dump({"stop": demo_stop, "bays": demo_bays, "markers": markers}, f, indent=1,
-                  ensure_ascii=False)
-    with open(os.path.join(DATA_DIR, "DemoTimetable.json"), "w") as f:
-        json.dump(demo_tt, f, ensure_ascii=False, separators=(",", ":"))
-    print("wrote NoValleyDuck/Data/DemoStop.json and DemoTimetable.json")
-
     if args.dry_run:
+        write_demo_files(demo_stop, demo_bays, markers, demo_tt)
+        print("dry run: wrote NoValleyDuck/Data/DemoStop.json and DemoTimetable.json")
         return
+
     pb = PocketBase().login()
-    if args.reset:
-        reset(pb)
+    restored = reset(pb) if args.reset else []
     pb.batch_upsert("stops", stops)
     pb.batch_upsert("bays", bays)
-    pb.batch_upsert("markers", markers)
+    # Markers are assigned and measured by hand (tools/assign_marker.py): restore them after a
+    # reset, and only create demo markers that don't exist yet — never overwrite a measured size.
+    stop_ids, bay_ids = {s["id"] for s in stops}, {b["id"] for b in bays}
+    restored = [m for m in restored if (m["stop"] in stop_ids or m["kind"] == "vehicle")
+                and (not m["bay"] or m["bay"] in bay_ids)]
+    pb.batch_upsert("markers", restored)
+    existing = {m["id"] for m in pb.list_all("markers")}
+    pb.batch_upsert("markers", [m for m in markers if m["id"] not in existing])
     pb.batch_upsert("facts", facts + demo_facts)
     pb.batch_upsert("timetables", timetables, chunk=10)
+    write_demo_files(demo_stop, demo_bays, demo_markers_from_server(pb, demo_stop["id"]), demo_tt)
+    print(f"restored {len(restored)} markers; wrote NoValleyDuck/Data/DemoStop.json and DemoTimetable.json")
     print("done")
 
 

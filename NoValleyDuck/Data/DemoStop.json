@@ -292,7 +292,7 @@
    "kind": "bay",
    "bay": "b82c5c63736c5b1",
    "vehicle_line": "",
-   "size_m": 0.163,
+   "size_m": 0.145,
    "note": "Bay A, A4 print"
   },
   {
@@ -302,7 +302,7 @@
    "kind": "bay",
    "bay": "b20b280ad6b77d9",
    "vehicle_line": "",
-   "size_m": 0.163,
+   "size_m": 0.145,
    "note": "Bay B, A4 print"
   },
   {
@@ -312,7 +312,7 @@
    "kind": "vehicle",
    "bay": "",
    "vehicle_line": "120",
-   "size_m": 0.163,
+   "size_m": 0.145,
    "note": "Bus door, line 120, A4 print"
   }
  ]
