@@ -37,7 +37,7 @@ The Xcode project uses **file-system synchronized groups**. A new file inside `N
 - State lives in `@Observable @MainActor` classes (see `App/Scanner.swift`). Camera frames are processed on a serial background queue and handed to the main actor.
 - Logging uses `os.Logger` with subsystem `com.novalleyduck.NoValleyDuck` and a category per area (`tags`, `audio`, `route`, …).
 - Apple frameworks first: MapKit (geocoding, walking routes), AVAudioEngine + `AVAudioEnvironmentNode` (spatial audio), `CMHeadphoneMotionManager` (AirPods head tracking and gestures), CoreLocation, AVSpeechSynthesizer, App Intents (Siri). Ask before adding a dependency.
-- MapKit has **no** public-transport directions. Transit routes come from the teammate's Salzburg data (SPEC §3).
+- MapKit has **no** public-transport directions. Bus routes come from Transitous (`Navigation/TransitousClient.swift`, JSON API), with a MapKit-only fallback (SPEC §3).
 - AprilTag family is **tag25h9**. Only accept detections with `hamming == 0 && margin >= 40`. Marker size is a setting in the app (`markerSizeCm`), so don't hard-code it elsewhere.
 - Any new permission (location, motion, microphone, speech) needs its `INFOPLIST_KEY_NS…UsageDescription` build setting. Write it in plain English and say why the app needs it.
 - Driver side and complaints go to a teammate's **PocketBase** (public URL). Its schema and the driver web app belong to that teammate. Keep the URL in one config constant and don't invent collections without checking with them.
