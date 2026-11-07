@@ -19,15 +19,27 @@ This is a hackathon project (Tourism Hackathon 2026), with a real field test on 
 ```
 AGENTS.md / CLAUDE.md           agent instructions (CLAUDE.md just imports this file)
 SPEC.md                         product spec (source of truth)
-NoValleyDuck.xcodeproj          Xcode project, one target + scheme: NoValleyDuck
+NoValleyDuck.xcodeproj          Xcode project, app target + NoValleyDuckTests (Swift Testing), scheme NoValleyDuck
+NoValleyDuck-Info.plist         extra Info.plist keys (background modes audio + location, file sharing)
 NoValleyDuck/
-  App/                          app entry (NoValleyDuckApp.swift), Scanner (camera → tag detections)
+  App/                          app entry, RiderView (main screen), Siri intents, DebugView (marker dev screen), Config (PocketBase URL)
+  Trip/                         TripController (the whole journey, SPEC §2), Prompter (questions + 8 s answer window),
+                                RouteGeometry (checkpoints, off-route), WaitingSpot (marker offsets → waiting spot)
+  Audio/                        AudioGuide (one engine: HRTF beacon, earcons, speech), HeadTracker (AirPods yaw, nod/shake), VoiceInput
+  Navigation/                   NavigationService (MapKit + Transitous plan), TransitousClient, models, route test screen
+  Guidance/                     MarkerPipeline (camera → safety filter → lock/events), MarkerTracker, GuidanceEngine, hall-test recorder
+  Data/                         PocketBase client, stops/bays/markers/timetables, DriverClient (pickup, stop request, complaint)
   Camera/                       CameraService (AVFoundation, 1080p, 10 fps), TagDetector (Swift wrapper), CameraPreview (debug overlay)
-  ATDetector.c/.h               C glue around the AprilTag library (tag25h9 + pose)
+  Sounds/                       beacon and cue sounds
+  ATDetector.c/.h               C glue around the AprilTag library (tag25h9 + pose incl. rotation)
   ThirdParty/apriltag/          vendored AprilTag C library: do not modify
   NoValleyDuck-Bridging-Header.h
-data/                           (planned) Salzburg transit data from a teammate
+NoValleyDuckTests/              unit tests (run on a simulator)
+tools/                          PocketBase setup, GTFS import, marker PDFs and assignment (see README.md)
+_specs/spec.md                  older "HaltMal" spec from feat/marker-detection (SPEC.md wins)
 ```
+
+Debug launch arguments: `-startDestination "Getreidegasse"` starts a route without voice, `-navTestDestination "Mirabellplatz"` logs a plan. The rider screen's Debug menu has fast-forward (bus time), simulate ride, skip marker scan and the demo-stop switch.
 
 The Xcode project uses **file-system synchronized groups**. A new file inside `NoValleyDuck/` gets picked up automatically, so don't edit `project.pbxproj` to add files.
 
@@ -38,7 +50,7 @@ The Xcode project uses **file-system synchronized groups**. A new file inside `N
 - Logging uses `os.Logger` with subsystem `com.novalleyduck.NoValleyDuck` and a category per area (`tags`, `audio`, `route`, …).
 - Apple frameworks first: MapKit (geocoding, walking routes), AVAudioEngine + `AVAudioEnvironmentNode` (spatial audio), `CMHeadphoneMotionManager` (AirPods head tracking and gestures), CoreLocation, AVSpeechSynthesizer, App Intents (Siri). Ask before adding a dependency.
 - MapKit has **no** public-transport directions. Bus routes come from Transitous (`Navigation/TransitousClient.swift`, JSON API), with a MapKit-only fallback (SPEC §3).
-- AprilTag family is **tag25h9**. Only accept detections with `hamming == 0 && margin >= 40`. Marker size is a setting in the app (`markerSizeCm`), so don't hard-code it elsewhere.
+- AprilTag family is **tag25h9**. Only accept detections with `hamming == 0 && margin >= 40`. Marker size is stored per marker (`Marker.sizeM`, measured after printing, SPEC §6), so don't hard-code it elsewhere.
 - Any new permission (location, motion, microphone, speech) needs its `INFOPLIST_KEY_NS…UsageDescription` build setting. Write it in plain English and say why the app needs it.
 - Driver side and complaints go to a teammate's **PocketBase** (public URL). Its schema and the driver web app belong to that teammate. Keep the URL in one config constant and don't invent collections without checking with them.
 - Comments explain *why*, briefly. Match the style already in `Camera/`.
