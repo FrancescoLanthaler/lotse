@@ -35,6 +35,33 @@ struct PocketBaseClient: Sendable {
         }
     }
 
+    /// Creates (`id` nil) or updates a record; returns the record id. Public create/update rules,
+    /// so no auth (see tools/setup_pocketbase.py).
+    @discardableResult
+    func save(_ collection: String, id: String? = nil, _ body: [String: Any]) async throws -> String {
+        let path = "/api/collections/\(collection)/records" + (id.map { "/\($0)" } ?? "")
+        guard let url = URL(string: baseURL.absoluteString + path) else { throw URLError(.badURL) }
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.httpMethod = id == nil ? "POST" : "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse, userInfo: [NSLocalizedDescriptionKey: String(decoding: data, as: UTF8.self)])
+        }
+        struct Created: Decodable { let id: String }
+        return try JSONDecoder().decode(Created.self, from: data).id
+    }
+
+    /// PocketBase date format, UTC.
+    static func date(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS'Z'"
+        return f.string(from: d)
+    }
+
     /// Strict percent-encoding: PocketBase filters contain `&&`, `=` and quotes, which
     /// URLComponents would leave unescaped in query values.
     private func makeURL(_ path: String, query: [String: String]) throws -> URL {
