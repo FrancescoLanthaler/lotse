@@ -30,6 +30,9 @@ final class VoiceInput {
     func listen(timeout: TimeInterval, locale: Locale = .current,
                 done: @escaping (String) -> Bool = { _ in false }) async -> String? {
         cancel()
+        #if targetEnvironment(simulator)
+        return nil              // no mic input in the simulator (see AudioGuide.start)
+        #endif
         guard SFSpeechRecognizer.authorizationStatus() == .authorized,
               let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
               recognizer.isAvailable else { return nil }

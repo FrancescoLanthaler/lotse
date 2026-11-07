@@ -36,10 +36,15 @@ final class AudioGuide: NSObject, AVSpeechSynthesizerDelegate {
         guard !running else { return }
         do {
             let session = AVAudioSession.sharedInstance()
+            #if targetEnvironment(simulator)
+            // The simulator aborts (CoreAudio RPC timeout) when the engine starts with mic input.
+            try session.setCategory(.playback, mode: .default, options: [.duckOthers])
+            #else
             // playAndRecord (not playback) so voice answers can use the iPhone mic without
             // switching category mid-route; A2DP keeps AirPods output in stereo for the HRTF.
             try session.setCategory(.playAndRecord, mode: .default,
                                     options: [.allowBluetoothA2DP, .duckOthers, .defaultToSpeaker])
+            #endif
             try session.setActive(true)
             configure()
             try engine.start()
