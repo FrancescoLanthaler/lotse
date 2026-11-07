@@ -14,11 +14,11 @@ struct TagDetection: Sendable {
         unitTranslation.map { ($0 * $0).sum().squareRoot() * markerSize }
     }
     var sidePixels: Double {              // mean edge length, for the no-pose fallback
-        let next: [CGPoint] = Array(corners.dropFirst()) + [corners[0]]
-        let edges: [Double] = zip(corners, next).map { (a: CGPoint, b: CGPoint) -> Double in
-            Double(hypot(a.x - b.x, a.y - b.y))
-        }
-        return edges.reduce(0, +) / 4
+        let shifted: [CGPoint] = Array(corners.dropFirst()) + [corners[0]]
+        let pairs: [(CGPoint, CGPoint)] = Array(zip(corners, shifted))
+        let lengths: [Double] = pairs.map { a, b -> Double in hypot(a.x - b.x, a.y - b.y) }
+        let total: Double = lengths.reduce(0, +)
+        return total / 4
     }
 }
 
