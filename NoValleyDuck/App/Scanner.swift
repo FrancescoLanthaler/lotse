@@ -12,6 +12,7 @@ final class Scanner {
     @ObservationIgnored let camera = CameraService()
     private(set) var detections: [TagDetection] = []
     private(set) var frameSize: CGSize = .zero
+    private(set) var lastFrame = Date.distantPast
     private(set) var status = "Starting camera…"
     @ObservationIgnored private var started = false
 
@@ -31,19 +32,11 @@ final class Scanner {
             return
         }
         camera.onFrame = { [weak self] dets, size in
-            for d in dets {
-                let pose = d.unitTranslation.map {
-                    String(format: "t/size=(%.2f, %.2f, %.2f) err=%.2e", $0.x, $0.y, $0.z, d.poseError ?? 0)
-                } ?? "no pose"
-                tagLog.info("""
-                tag id=\(d.id) hamming=\(d.hamming) margin=\(d.margin, format: .fixed(precision: 1)) \
-                side=\(d.sidePixels, format: .fixed(precision: 0))px \
-                center=(\(Int(d.center.x)),\(Int(d.center.y))) of \(Int(size.width))x\(Int(size.height)) \(pose)
-                """)
-            }
+            let capturedAt = Date()
             Task { @MainActor [weak self] in
                 self?.detections = dets
                 self?.frameSize = size
+                self?.lastFrame = capturedAt
             }
         }
         camera.start()

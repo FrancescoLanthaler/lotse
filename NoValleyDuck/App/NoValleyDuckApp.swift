@@ -21,17 +21,8 @@ struct NoValleyDuckApp: App {
                     .background(.black.opacity(0.6), in: Capsule())
                     .foregroundStyle(.white)
                     .padding(.top, 8)
-                VStack {
-                    Spacer()
-                    Stepper(value: $markerSizeCm, in: 1...100, step: 0.5) {
-                        Text("Marker size: \(markerSizeCm, specifier: "%.1f") cm")
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 16).padding(.bottom, 8)
-                }
             }
+            .modifier(MarkerGuidance(scanner: scanner))
             .task { await scanner.start() }
         }
     }

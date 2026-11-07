@@ -189,6 +189,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NoValleyDuck/NoValleyDuck.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ADF6QAW538;
@@ -196,6 +197,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/NoValleyDuck/ThirdParty/apriltag/**";
 				INFOPLIST_KEY_NSCameraUsageDescription = "NoValleyDuck uses the camera to find stop markers and guide you to your bus.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "NoValleyDuck uses headphone motion to adjust the direction of guidance sounds.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -207,7 +209,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_CFLAGS = "-w";
-				PRODUCT_BUNDLE_IDENTIFIER = com.novalleyduck.NoValleyDuck;
+				PRODUCT_BUNDLE_IDENTIFIER = com.novalleyduck.Navigation;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -223,6 +225,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NoValleyDuck/NoValleyDuck.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ADF6QAW538;
@@ -230,6 +233,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/NoValleyDuck/ThirdParty/apriltag/**";
 				INFOPLIST_KEY_NSCameraUsageDescription = "NoValleyDuck uses the camera to find stop markers and guide you to your bus.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "NoValleyDuck uses headphone motion to adjust the direction of guidance sounds.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -241,7 +245,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_CFLAGS = "-w";
-				PRODUCT_BUNDLE_IDENTIFIER = com.novalleyduck.NoValleyDuck;
+				PRODUCT_BUNDLE_IDENTIFIER = com.novalleyduck.Navigation;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
