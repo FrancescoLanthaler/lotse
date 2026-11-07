@@ -6,5 +6,12 @@
 	     Finder and the Files app; this key has no INFOPLIST_KEY_ build setting. -->
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<!-- SPEC §3 "Background operation": beacon, speech, GPS and prompts keep running with the
+	     screen locked. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>location</string>
+	</array>
 </dict>
 </plist>

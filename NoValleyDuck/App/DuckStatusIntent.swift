@@ -2,14 +2,15 @@ import AppIntents
 
 struct DuckStatusIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Duck Status"
-    static var description = IntentDescription("Reports whether NoValleyDuck currently sees an AprilTag.")
+    static var description = IntentDescription("Says where you are in the trip and whether a stop marker was found.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
-        let scanner = Scanner.shared
-        let message = scanner.detections.isEmpty
-            ? "No tags detected."
-            : "\(scanner.detections.count) tag(s) detected: \(scanner.status)."
+        let trip = TripController.shared
+        let tags = trip.pipeline.lastFrame?.detections.filter { $0.status == .locked }.map(\.detection.id) ?? []
+        let message = tags.isEmpty
+            ? "No stop marker found. \(trip.statusTitle)."
+            : "Stop marker \(tags.map(String.init).joined(separator: ", ")) found. \(trip.statusTitle)."
         return .result(value: message, dialog: IntentDialog(stringLiteral: message))
     }
 }
@@ -24,7 +25,7 @@ struct ShowMessageIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        Scanner.shared.siriMessage = note
+        TripController.shared.siriMessage = note
         return .result()
     }
 }
@@ -45,8 +46,9 @@ struct NoValleyDuckShortcuts: AppShortcutsProvider {
         )
         AppShortcut(
             intent: StartNavigationIntent(),
-            phrases: ["Start \(.applicationName)"],
-            shortTitle: "Start Guiding",
+            phrases: ["Navigate with \(.applicationName)", "Start \(.applicationName)",
+                      "Start guiding me with \(.applicationName)"],
+            shortTitle: "Navigate",
             systemImageName: "figure.walk"
         )
         AppShortcut(

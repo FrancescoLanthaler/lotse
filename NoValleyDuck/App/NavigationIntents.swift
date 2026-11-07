@@ -1,20 +1,22 @@
 import AppIntents
 
 struct StartNavigationIntent: AppIntent {
-    static var title: LocalizedStringResource = "Start Guiding"
-    static var description = IntentDescription("Starts spoken guidance toward the nearest detected tag.")
+    static var title: LocalizedStringResource = "Navigate"
+    static var description = IntentDescription("Plans a walk and bus trip to a destination and guides you there by sound.")
     static var openAppWhenRun = true
 
-    @Parameter(title: "Destination", requestValueDialog: "Where would you like to go?")
+    @Parameter(title: "Destination", requestValueDialog: "Where to?")
     var destination: DestinationEntity
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Start guiding me to \(\.$destination)")
+        Summary("Navigate to \(\.$destination)")
     }
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        Scanner.shared.startNavigating(destination: destination.name)
+        let trip = TripController.shared
+        Task { await trip.setup() }       // camera and stop data; not needed to start walking
+        trip.start(destination: destination.name)
         return .result()
     }
 }
@@ -26,7 +28,7 @@ struct StopNavigationIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        Scanner.shared.stopNavigating()
+        TripController.shared.stop()
         return .result()
     }
 }

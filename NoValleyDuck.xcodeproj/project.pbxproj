@@ -275,7 +275,9 @@
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NoValleyDuck uses the camera to find stop markers and guide you to your bus.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "NoValleyDuck uses your location to plan your route, guide you along it and know which stop you are at.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "NoValleyDuck uses headphone motion to adjust the direction of guidance sounds.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NoValleyDuck listens when you say a destination or answer a question out loud.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "NoValleyDuck uses your AirPods head movement to place guidance sounds around you and to let you answer questions with a nod or a shake.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NoValleyDuck turns what you say into text, so you can set a destination and answer questions by voice.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_FILE = "NoValleyDuck-Info.plist";
@@ -316,7 +318,9 @@
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "NoValleyDuck uses the camera to find stop markers and guide you to your bus.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "NoValleyDuck uses your location to plan your route, guide you along it and know which stop you are at.";
-				INFOPLIST_KEY_NSMotionUsageDescription = "NoValleyDuck uses headphone motion to adjust the direction of guidance sounds.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "NoValleyDuck listens when you say a destination or answer a question out loud.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "NoValleyDuck uses your AirPods head movement to place guidance sounds around you and to let you answer questions with a nod or a shake.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "NoValleyDuck turns what you say into text, so you can set a destination and answer questions by voice.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_FILE = "NoValleyDuck-Info.plist";

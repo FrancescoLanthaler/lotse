@@ -120,7 +120,7 @@ final class NavigationService {
             + walked * walkPenaltySecondsPerMeter
     }
 
-    private func walkingLegOrStraightLine(from: Place, to: Place) async -> WalkingLeg {
+    func walkingLegOrStraightLine(from: Place, to: Place) async -> WalkingLeg {
         if let leg = try? await walkingLeg(from: from, to: to) { return leg }
         let d = from.coordinate.distance(to: to.coordinate)
         let step = NavigationStep(index: 0, instruction: "Walk to \(to.spokenName)", notice: nil,
