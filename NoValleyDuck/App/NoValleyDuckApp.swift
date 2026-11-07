@@ -8,7 +8,11 @@ struct NoValleyDuckApp: App {
     var body: some Scene {
         WindowGroup {
             RiderView(trip: trip)
-                .task { await trip.setup() }
+                .task {
+                    // HACK: launch with `-startDestination "Getreidegasse"` to start a route without voice.
+                    if let dest = UserDefaults.standard.string(forKey: "startDestination") { trip.start(destination: dest) }
+                    await trip.setup()
+                }
                 .task {
                     // TEMP: launch with `-navTestDestination "Mirabellplatz"` to log a plan to the console.
                     // Add `-navTestMapKitOnly YES` to skip Transitous and use MapKit only.

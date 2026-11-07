@@ -178,6 +178,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         listeningForDestination = false
         guard let text, !text.isEmpty else {
             await say("I didn't catch that. Tap Where to and try again.")
+            if !isRouteActive { audio.stop() }
             return
         }
         start(destination: text)
@@ -210,7 +211,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         } catch {
             guard phase == .planning else { return }
             await say("\(error.localizedDescription) Route not started.")
-            end()
+            if phase == .planning { end() }
         }
     }
 
@@ -274,17 +275,20 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     /// Stops the route (Siri "stop guiding", the Stop button, or a failed plan).
     func stop() {
         guard isRouteActive || phase == .arrived else { return }
+        if let id = pickupRequestId, phase == .waiting { Task { try? await driver.setStatus(request: id, "cancelled") } }
+        // Idle right away, so a plan or prompt still in flight can't carry on.
+        phase = .idle
+        setCamera(false)
         prompter.cancel()
         voice.cancel()
         audio.stopSpeaking()
         Task {
             await say("Route stopped.")
-            end()
+            if phase == .idle { end() }       // unless a new route started meanwhile
         }
     }
 
     private func end() {
-        if let id = pickupRequestId, phase == .waiting { Task { try? await driver.setStatus(request: id, "cancelled") } }
         phase = .idle
         timer?.invalidate()
         timer = nil
@@ -333,6 +337,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         setCamera(false)
         Task {
             await say("You've arrived at \(plan?.destination.spokenName ?? "your destination").")
+            guard phase == .arrived else { return }
             end()
             phase = .arrived
         }
@@ -478,7 +483,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         checkingBay = false
         if !exit { targetBayId = nil; spotBayId = nil }
         pipeline.requestedLine = nil
-        if UIApplication.shared.applicationState == .active {
+        if UIApplication.shared.applicationState != .background {   // .inactive = screen on, e.g. an alert
             beginCameraScan()
         } else {
             askToUnlock()
@@ -947,6 +952,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     }
 
     private func handleLocation(_ loc: CLLocation) {
+        log.debug("location \(loc.coordinate.latitude), \(loc.coordinate.longitude) ±\(loc.horizontalAccuracy) m, \(loc.speed) m/s")
         guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= 50 else { return }
         location = loc
         switch phase {
