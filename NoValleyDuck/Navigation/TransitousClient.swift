@@ -8,7 +8,7 @@ import Foundation
 /// name, version and contact; the app must link https://transitous.org/sources/ visibly.
 struct TransitousClient {
     /// REQUIRED by the Transitous policy: put the team's email or project URL here.
-    static let contact = "TODO-add-contact-email-or-repo-url"
+    static let contact = "https://github.com/FrancescoLanthaler/novalleyduck"
     static let userAgent = "NoValleyDuck/0.1 (FH Salzburg hackathon prototype; \(contact))"
     static let attributionURL = URL(string: "https://transitous.org/sources/")!
 
