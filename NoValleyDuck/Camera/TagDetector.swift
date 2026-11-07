@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 
-struct TagDetection: Sendable {
+struct TagDetection: Sendable, Equatable {
     let id: Int
     let hamming: Int
     let margin: Float

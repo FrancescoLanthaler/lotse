@@ -2,9 +2,16 @@ import AVFoundation
 import QuartzCore
 import simd
 
+/// Per-frame camera geometry needed for distance/bearing maths.
+struct FrameInfo: Sendable, Equatable {
+    let size: CGSize      // luma plane, sensor (landscape) orientation
+    let fx, fy: Double    // focal length in pixels
+}
+
 /// Back camera at 1080p, YUV. The luma plane goes straight into AprilTag.
-/// Frames are throttled to `minInterval` and processed on one serial queue.
-final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+/// Frames are throttled to `minInterval` and processed on one serial queue (`frameQueue`).
+/// `detector`, `minInterval` and anything run via `onFrameQueue` are confined to that queue.
+final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
     let session = AVCaptureSession()
     private let output = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session")
@@ -12,7 +19,7 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     let detector = TagDetector()
     private var lastProcessed: CFTimeInterval = 0
     var minInterval: CFTimeInterval = 0.1                 // 10 fps; raise when the phone gets hot
-    var onFrame: (@Sendable ([TagDetection], CGSize) -> Void)?   // called on frameQueue
+    var onFrame: (@Sendable ([TagDetection], FrameInfo) -> Void)?   // called on frameQueue
     private var fallbackFx = 0.0
 
     func configure() throws {
@@ -46,6 +53,17 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     func start() { sessionQueue.async { self.session.startRunning() } }
     func stop()  { sessionQueue.async { self.session.stopRunning() } }
 
+    /// Run work on the frame queue, serialised with detection.
+    func onFrameQueue(_ work: @escaping @Sendable () -> Void) { frameQueue.async(execute: work) }
+
+    /// Heat protection (spec): 5 fps and half-resolution quad detection, or back to normal.
+    func setThrottled(_ throttled: Bool) {
+        frameQueue.async {
+            self.minInterval = throttled ? 0.2 : 0.1
+            self.detector.setDecimate(throttled ? 2.0 : 1.0)
+        }
+    }
+
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         let now = CACurrentMediaTime()
@@ -69,6 +87,6 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
                                    width: w, height: h,
                                    rowStride: CVPixelBufferGetBytesPerRowOfPlane(pb, 0),
                                    fx: fx, fy: fy, cx: cx, cy: cy)
-        onFrame?(dets, CGSize(width: w, height: h))
+        onFrame?(dets, FrameInfo(size: CGSize(width: w, height: h), fx: fx, fy: fy))
     }
 }
