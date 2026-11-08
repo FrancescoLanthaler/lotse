@@ -94,6 +94,15 @@ struct RouteGeometryTests {
         #expect(turn.map { $0.coordinate.distance(to: corner) < 1 } == true)
     }
 
+    @Test func passedCheckpointIsSkippedEvenIfNeverReached() {
+        let cps = RouteGeometry.checkpoints(for: leg([origin, north(100)]))   // 25, 50, 75, 100
+        #expect(RouteGeometry.nextIndex(after: north(20, east: 15), checkpoints: cps, from: 0) == 0)
+        #expect(RouteGeometry.nextIndex(after: north(32, east: 15), checkpoints: cps, from: 0) == 1)
+        #expect(RouteGeometry.nextIndex(after: north(60, east: -12), checkpoints: cps, from: 0) == 2)
+        #expect(RouteGeometry.nextIndex(after: north(60, east: 60), checkpoints: cps, from: 0) == 0)  // off the route
+        #expect(RouteGeometry.nextIndex(after: north(10), checkpoints: cps, from: 2) == 2)            // never back
+    }
+
     @Test func distanceToPath() {
         let d = RouteGeometry.distance(from: north(50, east: 30), toPath: [origin, north(100)])
         #expect(abs(d - 30) < 0.5)

@@ -74,6 +74,29 @@ enum RouteGeometry {
         return best
     }
 
+    /// The checkpoint the beacon should aim at, judged by where `p` projects onto the checkpoint
+    /// line: more than 3 m past checkpoint k means k is behind, even if the fix never came within
+    /// 10 m of it. Looks only a few checkpoints ahead (a route can loop back near itself) and
+    /// only when `p` is within 25 m of the line.
+    static func nextIndex(after p: Coordinate, checkpoints: [Checkpoint], from index: Int) -> Int {
+        guard index < checkpoints.count - 1 else { return index }
+        func xy(_ c: Coordinate) -> SIMD2<Double> {
+            SIMD2((c.longitude - p.longitude) * 111_320 * cos(p.latitude * .pi / 180),
+                  (c.latitude - p.latitude) * 110_540)
+        }
+        var best = (d: Double.infinity, next: index)
+        for k in index..<min(index + 4, checkpoints.count - 1) {
+            let a = xy(checkpoints[k].coordinate), ab = xy(checkpoints[k + 1].coordinate) - a
+            let len = (ab * ab).sum().squareRoot()
+            guard len > 0 else { continue }
+            let along = (-a * ab).sum() / len             // p's position along k→k+1, from k
+            let q = a + ab * (max(0, min(len, along)) / len)
+            let d = (q * q).sum().squareRoot()
+            if d < best.d { best = (d, along > 3 ? k + 1 : k) }
+        }
+        return best.d <= 25 ? max(index, best.next) : index
+    }
+
     /// Path length from checkpoint `index` to the end, plus the straight line to it from `p`.
     static func remaining(from p: Coordinate, checkpoints: [Checkpoint], index: Int) -> Double {
         guard index < checkpoints.count else { return 0 }

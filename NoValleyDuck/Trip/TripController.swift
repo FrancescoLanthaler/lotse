@@ -67,6 +67,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     @ObservationIgnored private var lastDistanceUpdate: (at: Date, remaining: Double)?
     @ObservationIgnored private var replanning = false
     @ObservationIgnored private var lastPing = Date.distantPast
+    @ObservationIgnored private var lastDirectionLog = Date.distantPast
 
     // Stop, bay and bus
     @ObservationIgnored private var bus: BusLeg?
@@ -463,6 +464,10 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         } else {
             weakFixSince = nil
         }
+        if now.timeIntervalSince(lastDirectionLog) >= 5, let info = directionInfo {
+            lastDirectionLog = now
+            log.info("direction: \(info.text, privacy: .public)")
+        }
         audio.moveBeacon(angle: angle)
         if now.timeIntervalSince(lastPing) >= (onTarget ? 0.8 : 1.1) {
             lastPing = now
@@ -494,6 +499,13 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         }) {
             checkpointIndex = j + 1
             if checkpointIndex > last { finishWalk(); return }
+            audio.play(.chime)
+        }
+        // Walked past a checkpoint without the fix coming within 10 m (GPS error, other side of the
+        // street): aim at the next one instead of back at it. Never skips to the final target.
+        let ahead = RouteGeometry.nextIndex(after: p, checkpoints: checkpoints, from: checkpointIndex)
+        if ahead > checkpointIndex, ahead < last, loc.horizontalAccuracy <= 25 {
+            checkpointIndex = ahead
             audio.play(.chime)
         }
 
@@ -560,13 +572,19 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     func calibrate() {
         needsCalibration = false
         guard head.isConnected else { speak("AirPods head tracking isn't connected. I'll use your walking direction."); return }
-        // Indoors, near metal or with the phone held upright the compass can be off by 90° or more.
-        guard let h = phoneHeading, phoneHeadingAccuracy >= 0, phoneHeadingAccuracy <= 25 else {
-            speak("The compass isn't reliable here. Start walking, I'll use your walking direction.")
+        guard let h = phoneHeading else {
+            speak("The compass isn't ready yet. Start walking, I'll use your walking direction.")
             return
         }
+        // Calibrate even with a poor compass: without it the AirPods aren't used at all (turning the
+        // head changes nothing). Walking straight outside corrects the offset (align(toCourse:)).
         head.calibrate(phoneHeading: h)
-        speak("Direction set. Follow the beacon.")
+        if phoneHeadingAccuracy < 0 || phoneHeadingAccuracy > 25 {
+            // Indoors, near metal or with the phone held upright the compass can be off by 90° or more.
+            speak("Direction set, but the compass is unreliable here, so it may be off. It corrects itself once you walk outside.")
+        } else {
+            speak("Direction set. Follow the beacon.")
+        }
     }
 
     func skipCalibration() { needsCalibration = false }
