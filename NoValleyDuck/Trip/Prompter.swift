@@ -91,12 +91,14 @@ final class Prompter {
         let id = windowID
         let result = await withCheckedContinuation { (cont: CheckedContinuation<PromptOption?, Never>) in
             answer = cont
-            Task {
+            // With VoiceOver reading buttons out loud ("Yes, button"), the mic could take that as the
+            // answer: then only the buttons and nod/shake answer.
+            if !AudioGuide.useVoiceOver { Task {
                 let heard = await voice.listen(timeout: Self.window) { text in
                     Self.match(text, options) != nil
                 }
                 if let heard, let o = Self.match(heard, options), windowID == id { resolve(o) }
-            }
+            } }
             Task {
                 try? await Task.sleep(for: .seconds(Self.window))
                 if windowID == id { resolve(nil) }

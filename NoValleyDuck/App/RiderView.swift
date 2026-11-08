@@ -11,7 +11,6 @@ struct RiderView: View {
     @State private var showMarkers = false
     @State private var showRouteTest = false
     @AppStorage("showRouteMap") private var showMap = false
-    @AccessibilityFocusState private var promptFocused: Bool
 
     private var scanning: Bool {
         if case .scanning = trip.phase { return true }
@@ -60,7 +59,6 @@ struct RiderView: View {
                 .onDisappear { if !scanning { trip.pipeline.camera.stop() } }
         }
         .sheet(isPresented: $showRouteTest) { NavigationDebugView() }
-        .onChange(of: trip.prompter.pending) { _, p in promptFocused = p != nil }
         // VoiceOver two-finger double-tap: the current main action, wherever focus is.
         .accessibilityAction(.magicTap) {
             if trip.prompter.pending != nil { return }
@@ -146,7 +144,6 @@ struct RiderView: View {
                     .font(.title.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityFocused($promptFocused)
                 ForEach(prompt.options) { option in
                     let secondary = option.id == "no" || option.id == "notYet"
                     BigButton(option.label, style: secondary ? .secondary : .primary) {
