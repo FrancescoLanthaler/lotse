@@ -25,15 +25,20 @@ struct RiderView: View {
                 Color.black.ignoresSafeArea()
             }
             VStack(spacing: 16) {
-                header
                 if showMap && !scanning {
+                    header
                     RouteMapView(trip: trip)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                         .frame(maxHeight: .infinity)
+                    mainAction
                 } else {
-                    Spacer(minLength: 0)
+                    // Scrolls only when it doesn't fit (largest text sizes, a long message plus a
+                    // four-answer question), so no button ends up off screen.
+                    ViewThatFits(in: .vertical) {
+                        VStack(spacing: 16) { header; Spacer(minLength: 0); mainAction }
+                        ScrollView { VStack(spacing: 16) { header; mainAction } }
+                    }
                 }
-                mainAction
                 footer
             }
             .padding(16)
@@ -46,6 +51,12 @@ struct RiderView: View {
         }
         .sheet(isPresented: $showRouteTest) { NavigationDebugView() }
         .onChange(of: trip.prompter.pending) { _, p in promptFocused = p != nil }
+        // VoiceOver two-finger double-tap: the current main action, wherever focus is.
+        .accessibilityAction(.magicTap) {
+            if trip.prompter.pending != nil { return }
+            if trip.needsCalibration { trip.calibrate() }
+            else if !trip.isRouteActive { Task { await trip.askDestination() } }
+        }
     }
 
     private var header: some View {
@@ -73,7 +84,7 @@ struct RiderView: View {
                 Text(prompt.question).font(.title2.bold())
                     .accessibilityFocused($promptFocused)
                 ForEach(prompt.options) { option in
-                    BigButton(option.label, color: option.id == "no" || option.id == "notYet" ? .gray : .blue) {
+                    BigButton(option.label, color: option.id == "no" || option.id == "notYet" ? Color(white: 0.3) : .blue) {
                         trip.prompter.choose(option)
                     }
                     .accessibilityHint(prompt.question)
@@ -83,14 +94,17 @@ struct RiderView: View {
             VStack(spacing: 12) {
                 BigButton("Set direction", color: .blue) { trip.calibrate() }
                     .accessibilityHint("Hold your phone flat, top edge pointing where you face, then activate. This lines up the beacon sound with your AirPods.")
-                Button("Skip") { trip.skipCalibration() }.font(.title3)
+                Button { trip.skipCalibration() } label: {
+                    Text("Skip").font(.title3).frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .accessibilityHint("Uses your walking direction instead.")
             }
         } else if !trip.isRouteActive {
             VStack(spacing: 12) {
                 BigButton(trip.listeningForDestination ? "Listening…" : "Where to?", color: .blue) {
                     Task { await trip.askDestination() }
                 }
-                .accessibilityHint("Say a destination, for example Getreidegasse.")
+                .accessibilityHint("Say a destination, for example Getreidegasse. A two-finger double-tap also starts this.")
                 HStack {
                     // Explicit colours: the system field is dark in dark mode, and the screen is always black.
                     TextField("", text: $typed, prompt: Text("Or type a destination").foregroundStyle(.gray))
@@ -102,6 +116,8 @@ struct RiderView: View {
                         .submitLabel(.go)
                         .onSubmit(go)
                     Button("Go", action: go).font(.title3.bold()).disabled(typed.isEmpty)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Go to typed destination")
                 }
             }
         }
@@ -116,6 +132,7 @@ struct RiderView: View {
                             .padding(.horizontal, 20).padding(.vertical, 10)
                             .background(.red, in: Capsule()).foregroundStyle(.white)
                     }
+                    .accessibilityHint("Stops all guidance right away.")
                 }
                 Spacer()
                 Menu {
@@ -131,6 +148,7 @@ struct RiderView: View {
                 } label: {
                     Label("Debug", systemImage: "ladybug").font(.title3)
                 }
+                .accessibilityHint("Developer tools for testing.")
             }
             // Required attribution for Transitous data.
             Link("Transit data: Transitous and sources", destination: TransitousClient.attributionURL)

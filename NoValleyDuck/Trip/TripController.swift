@@ -180,7 +180,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         let text = await voice.listen(timeout: 8, hints: Self.placeHints, alsoIn: Locale(identifier: "de-AT"))
         listeningForDestination = false
         guard let text = text ?? voice.otherLanguage, !text.isEmpty else {
-            await say("I didn't catch that. Tap Where to and try again.", idle: true)
+            await say("I didn't catch that. Use the Where to button again, or type the destination.", idle: true)
             if !isRouteActive { audio.stop() }
             return
         }
@@ -267,7 +267,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             }
             if head.isConnected {
                 needsCalibration = true
-                speak("So the sound turns with your head, hold your phone flat in front of you, top edge pointing where you face, and tap Set direction. Or just start walking.")
+                speak("So the sound turns with your head, hold your phone flat in front of you, top edge pointing where you face, and press Set direction. Or just start walking.")
             }
             beginLeg(0)
         } catch {

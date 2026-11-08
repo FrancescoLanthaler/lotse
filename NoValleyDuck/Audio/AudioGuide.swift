@@ -151,6 +151,8 @@ final class AudioGuide: NSObject, AVSpeechSynthesizerDelegate {
         let u = AVSpeechUtterance(string: text)
         u.voice = AVSpeechSynthesisVoice(language: "en-US")
         u.rate = AVSpeechUtteranceDefaultSpeechRate
+        // With VoiceOver on, speak with the user's VoiceOver voice and rate (many listen much faster).
+        u.prefersAssistiveTechnologySettings = true
         await withCheckedContinuation { cont in
             waiters[ObjectIdentifier(u)] = cont
             synthesizer.speak(u)
