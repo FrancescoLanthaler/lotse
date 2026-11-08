@@ -35,3 +35,22 @@ struct StopNavigationIntent: AppIntent {
         return .result()
     }
 }
+
+struct NoValleyDuckShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: StartNavigationIntent(),
+            // Not "Navigate with …": Siri takes "navigate" as a Maps request and never reaches the app.
+            phrases: ["Guide me with \(.applicationName)", "Start a trip with \(.applicationName)",
+                      "Start guiding me with \(.applicationName)"],
+            shortTitle: "Navigate",
+            systemImageName: "figure.walk"
+        )
+        AppShortcut(
+            intent: StopNavigationIntent(),
+            phrases: ["Stop guiding me in \(.applicationName)"],
+            shortTitle: "Stop Guiding",
+            systemImageName: "stop.circle"
+        )
+    }
+}

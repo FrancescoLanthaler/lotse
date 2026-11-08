@@ -751,7 +751,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         speak("Unlock your phone to scan the stop marker.")
         let c = UNMutableNotificationContent()
         c.title = "Scan the stop marker"
-        c.body = "Open NoValleyDuck, hold your phone up and turn slowly."
+        c.body = "Open Lotse, hold your phone up and turn slowly."
         c.sound = .default
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "scan", content: c, trigger: nil))
     }
