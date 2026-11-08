@@ -14,6 +14,10 @@ private let log = Logger(subsystem: "com.novalleyduck.NoValleyDuck", category: "
 @MainActor
 final class TripController: NSObject, CLLocationManagerDelegate {
     static let shared = TripController()
+    /// "Board bus X?" (and with it the driver's pickup message) comes this long before the scheduled
+    /// departure. Not just 3 min: at a terminus like Salzburg Messe the bus stands there early and
+    /// riders got on before the question, so the driver never heard of them.
+    static let boardAskLead: TimeInterval = 10 * 60
 
     enum Phase: Equatable {
         case idle, planning
@@ -372,6 +376,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         pickupRequestId = nil; nextComeCheck = nil; fastSince = nil; rideStops = []; reachedStop = -1
         askedStopRequest = false; nearExitSince = nil; spot = nil; spotGuidance = nil
         needsCalibration = false; timeShift = 0; simulating = false
+        pipeline.location.pin(nil)
     }
 
     /// Trip speech. Silent once the route is stopped (`idle`), so nothing from the old route is
@@ -611,6 +616,8 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             let (ctx, hasMarkers) = await markerContext(near: place)
             guard phase == .scanning(exit: exit) else { return }
             if !exit, let ctx { stopContext = ctx }
+            // Markers count at the stop the trip expects, not whatever GPS picks (or none indoors).
+            pipeline.location.pin(hasMarkers ? ctx?.stop : nil)
             guard hasMarkers else { noScan(exit: exit, reason: "This stop has no markers"); return }
             if UIApplication.shared.applicationState != .background {   // .inactive = screen on, e.g. an alert
                 beginCameraScan()
@@ -623,10 +630,8 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     /// The backend stop at `place` (or the demo stop), preferring one with bay markers.
     private func markerContext(near place: Place?) async -> (StopContext?, Bool) {
         func hasBays(_ c: StopContext) -> Bool { c.markers.values.contains { $0.kind != .vehicle } }
-        if pipeline.location.demoOverride || place == nil {
-            return (pipeline.stop, pipeline.stop.map(hasBays) ?? false)
-        }
-        let c = place!.coordinate.clCoordinate
+        guard let place else { return (pipeline.stop, pipeline.stop.map(hasBays) ?? false) }
+        let c = place.coordinate.clCoordinate
         let here = CLLocation(latitude: c.latitude, longitude: c.longitude)
         let stops = await pipeline.repository.stops(near: c, radius: 80)
             .filter { $0.location.distance(from: here) <= 80 }
@@ -636,6 +641,12 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             let ctx = await pipeline.repository.context(for: s)
             if hasBays(ctx) { return (ctx, true) }
             if nearest == nil { nearest = ctx }
+        }
+        // The planned stop has no markers: with the demo switch on, the demo stop's markers stand in
+        // (only then: a real stop with markers always wins, so the switch can't hijack a real trip).
+        if pipeline.location.demoOverride, let demo = DemoBundle.shared?.stop {
+            let ctx = await pipeline.repository.context(for: demo)
+            return (ctx, hasBays(ctx))
         }
         return (nearest, false)
     }
@@ -882,7 +893,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         nextComeCheck = nil
         if let d = departure {
             log.info("waiting for \(self.busName, privacy: .public) at \(d)")
-            if d.timeIntervalSince(now) > 4 * 60 {
+            if d.timeIntervalSince(now) > Self.boardAskLead + 60 {
                 speak("\(busName) is due at \(d.formatted(date: .omitted, time: .shortened)). I'll ask you a few minutes before.")
             }
         }
@@ -898,7 +909,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
     private func waitTick() {
         guard let dep = departure else { return }
-        if !askedBoard, now >= dep.addingTimeInterval(-3 * 60), boardRetry.map({ now >= $0 }) ?? true {
+        if !askedBoard, now >= dep.addingTimeInterval(-Self.boardAskLead), boardRetry.map({ now >= $0 }) ?? true {
             askedBoard = true
             Task { await askBoard() }
         }
@@ -1158,7 +1169,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     /// Jumps the clock to the next bus event: the board prompt, then "has the bus come yet?".
     func fastForward() {
         guard phase == .waiting, let dep = departure else { return }
-        let target = askedBoard ? max(now, dep.addingTimeInterval(5 * 60)) : dep.addingTimeInterval(-3 * 60)
+        let target = askedBoard ? max(now, dep.addingTimeInterval(5 * 60)) : dep.addingTimeInterval(-Self.boardAskLead)
         timeShift += max(0, target.timeIntervalSince(now)) + 0.5
         log.info("fast-forward, clock now \(self.now)")
     }
@@ -1180,6 +1191,14 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             }
             simulating = false
         }
+    }
+
+    /// Ends the current walk as if its target was reached: indoors GPS never arrives, so this
+    /// lets the hall demo go straight to the marker scan.
+    func skipWalk() {
+        guard phase == .walking else { return }
+        log.info("debug: walk skipped")
+        finishWalk()
     }
 
     /// Skips the current scan (debug, or when no markers are up at a stop).

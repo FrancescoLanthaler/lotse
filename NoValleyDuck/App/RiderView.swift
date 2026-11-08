@@ -216,6 +216,7 @@ struct RiderView: View {
                 .underline()
             Spacer()
             Menu {
+                Button("Skip walk (I'm at the stop)") { trip.skipWalk() }
                 Button("Fast-forward bus time") { trip.fastForward() }
                 Button("Simulate ride") { trip.simulateRide() }
                 Button("Skip marker scan") { trip.skipScan() }
