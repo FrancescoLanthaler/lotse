@@ -61,6 +61,7 @@ final class HeadTracker: NSObject, CMHeadphoneMotionManagerDelegate {
     private let manager = CMHeadphoneMotionManager()
     private var detector = HeadGestureDetector()
     private(set) var yawDeg: Double?
+    private(set) var pitchDeg: Double?      // debug: gesture test screen
     private var lastSample = Date.distantPast
     private var offset: Double?
     /// Called for every detected gesture; the prompt decides whether it counts.
@@ -113,6 +114,7 @@ final class HeadTracker: NSObject, CMHeadphoneMotionManagerDelegate {
     private func handle(_ motion: CMDeviceMotion) {
         lastSample = Date()
         yawDeg = motion.attitude.yaw * 180 / .pi
+        pitchDeg = motion.attitude.pitch * 180 / .pi
         if let g = detector.add(t: motion.timestamp, pitch: motion.attitude.pitch, yaw: motion.attitude.yaw) {
             log.info("gesture \(String(describing: g))")
             onGesture?(g)

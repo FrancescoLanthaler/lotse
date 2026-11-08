@@ -10,6 +10,7 @@ struct RiderView: View {
     @State private var typed = ""
     @State private var showMarkers = false
     @State private var showRouteTest = false
+    @State private var showGestureTest = false
     @AppStorage("showRouteMap") private var showMap = false
     @AccessibilityFocusState private var promptFocused: Bool
 
@@ -60,6 +61,7 @@ struct RiderView: View {
                 .onDisappear { if !scanning { trip.pipeline.camera.stop() } }
         }
         .sheet(isPresented: $showRouteTest) { NavigationDebugView() }
+        .sheet(isPresented: $showGestureTest) { HeadGestureTestView(trip: trip) }
         .onChange(of: trip.prompter.pending) { _, p in promptFocused = p != nil }
         // VoiceOver two-finger double-tap: the current main action, wherever focus is.
         .accessibilityAction(.magicTap) {
@@ -227,6 +229,7 @@ struct RiderView: View {
                     set: { trip.pipeline.location.setDemoOverride($0) }))
                 Button("Marker debug view") { showMarkers = true }
                 Button("Route test") { showRouteTest = true }
+                Button("Head gesture test") { showGestureTest = true }
                 Toggle("Show route map", isOn: $showMap)
             } label: {
                 Image(systemName: "ladybug")
