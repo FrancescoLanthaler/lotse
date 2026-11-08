@@ -49,6 +49,9 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     // Location
     @ObservationIgnored private(set) var location: CLLocation?
     @ObservationIgnored private var phoneHeading: Double?
+    @ObservationIgnored private var phoneHeadingAccuracy: Double = -1     // degrees, < 0 = invalid
+    @ObservationIgnored private var weakFixSince: Date?
+    @ObservationIgnored private var warnedWeakFix = false
     @ObservationIgnored private var recentCourses: [Double] = []
     @ObservationIgnored private var simulating = false
 
@@ -416,21 +419,50 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         announcedTurns = []
         offRouteSince = nil
         lastDistanceUpdate = nil
+        weakFixSince = nil
+        warnedWeakFix = false
         log.info("walk to \(w.to.name, privacy: .public): \(self.checkpoints.count) checkpoints")
     }
 
     /// Head direction: AirPods (calibrated / GPS-aligned), else the walking course, else the phone compass.
-    private var heading: Double? {
-        if let h = head.heading { return h }
-        if let loc = location, loc.speed > 0.7, loc.course >= 0 { return loc.course }
-        return phoneHeading
+    private var heading: (degrees: Double, source: String)? {
+        if let h = head.heading { return (h, "AirPods") }
+        if let loc = location, loc.speed > 0.7, loc.course >= 0 { return (loc.course, "walking course") }
+        return phoneHeading.map { ($0, "phone compass") }
+    }
+
+    /// Debug: what the beacon is based on right now (shown on the route map).
+    var directionInfo: (location: CLLocation, heading: Double?, target: Coordinate, text: String)? {
+        guard phase == .walking, checkpointIndex < checkpoints.count, let loc = location else { return nil }
+        let target = checkpoints[checkpointIndex].coordinate
+        let bearing = Coordinate(loc.coordinate).bearing(to: target)
+        let d = Int(Coordinate(loc.coordinate).distance(to: target))
+        guard let h = heading else {
+            return (loc, nil, target, "Target \(Int(bearing))° \(d) m · no heading yet · GPS ±\(Int(loc.horizontalAccuracy)) m")
+        }
+        let off = Int((bearing - h.degrees + 540).truncatingRemainder(dividingBy: 360) - 180)
+        return (loc, h.degrees, target, "Facing \(Int(h.degrees))° (\(h.source)) · target \(Int(bearing))° \(d) m · off \(off)° · GPS ±\(Int(loc.horizontalAccuracy)) m")
     }
 
     private func walkTick() {
         guard checkpointIndex < checkpoints.count, let loc = location else { return }
-        let bearing = Coordinate(loc.coordinate).bearing(to: checkpoints[checkpointIndex].coordinate)
-        let angle = heading.map { (bearing - $0 + 540).truncatingRemainder(dividingBy: 360) - 180 } ?? 0
-        let onTarget = heading != nil && abs(angle) < 20
+        let target = checkpoints[checkpointIndex].coordinate
+        let bearing = Coordinate(loc.coordinate).bearing(to: target)
+        let angle = heading.map { (bearing - $0.degrees + 540).truncatingRemainder(dividingBy: 360) - 180 } ?? 0
+        // With the fix error near the distance to the target (indoors), the direction can be anything:
+        // then never claim "facing the right way".
+        let weak = loc.horizontalAccuracy > max(20, Coordinate(loc.coordinate).distance(to: target) / 2)
+        let onTarget = heading != nil && !weak && abs(angle) < 20
+        if weak, loc.horizontalAccuracy > 20 {
+            let since = weakFixSince ?? now
+            weakFixSince = since
+            if !warnedWeakFix, now.timeIntervalSince(since) >= 5, !audio.isSpeaking {
+                warnedWeakFix = true
+                speak("Your position is uncertain here, so the beacon direction may be wrong. It gets better outside.")
+            }
+        } else {
+            weakFixSince = nil
+        }
         audio.moveBeacon(angle: angle)
         if now.timeIntervalSince(lastPing) >= (onTarget ? 0.8 : 1.1) {
             lastPing = now
@@ -528,7 +560,11 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     func calibrate() {
         needsCalibration = false
         guard head.isConnected else { speak("AirPods head tracking isn't connected. I'll use your walking direction."); return }
-        guard let h = phoneHeading else { speak("The compass isn't ready yet. Start walking, I'll use your walking direction."); return }
+        // Indoors, near metal or with the phone held upright the compass can be off by 90° or more.
+        guard let h = phoneHeading, phoneHeadingAccuracy >= 0, phoneHeadingAccuracy <= 25 else {
+            speak("The compass isn't reliable here. Start walking, I'll use your walking direction.")
+            return
+        }
         head.calibrate(phoneHeading: h)
         speak("Direction set. Follow the beacon.")
     }
@@ -1039,7 +1075,10 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading h: CLHeading) {
-        MainActor.assumeIsolated { phoneHeading = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading }
+        MainActor.assumeIsolated {
+            phoneHeading = h.trueHeading >= 0 ? h.trueHeading : h.magneticHeading
+            phoneHeadingAccuracy = h.headingAccuracy
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
