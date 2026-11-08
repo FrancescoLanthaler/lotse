@@ -13,6 +13,8 @@ final class VoiceInput {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var continuation: CheckedContinuation<String?, Never>?
     private var latest: String?
+    /// All candidate transcriptions of the last result, best first (for matching place names).
+    private(set) var alternatives: [String] = []
     private var generation = 0          // ignores callbacks and timeouts of an earlier listen
 
     static func requestAccess() async -> Bool {
@@ -40,9 +42,12 @@ final class VoiceInput {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.contextualStrings = hints
-        if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
+        // On-device is fast and offline (yes/no on the bus), but much worse at place names, so a
+        // listen with hints (the destination) uses Apple's server recognition.
+        if hints.isEmpty, recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
         self.request = request
         latest = nil
+        alternatives = []
         generation += 1
         let gen = generation
 
@@ -64,10 +69,11 @@ final class VoiceInput {
             continuation = cont
             task = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 let text = result?.bestTranscription.formattedString
+                let all = result?.transcriptions.map(\.formattedString) ?? []
                 let final = result?.isFinal ?? false
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == gen else { return }
-                    if let text, !text.isEmpty { self.latest = text }
+                    if let text, !text.isEmpty { self.latest = text; self.alternatives = all }
                     if let text, done(text) { self.finish(text) }
                     else if final || error != nil { self.finish(self.latest) }
                 }

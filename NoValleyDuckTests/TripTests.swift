@@ -179,3 +179,23 @@ struct TripWordingTests {
         #expect(!TripController.sameDirection("Salzburg Süd", nil))
     }
 }
+
+@Suite("Place name matching")
+@MainActor
+struct PlaceMatchTests {
+    @Test(arguments: [("Oilpark", "Europark"), ("Euro park", "Europark"), ("take me to Europark", "Europark"),
+                      ("Ferdinand Hanusch Platz", "Ferdinand-Hanusch-Platz"), ("Mirabell Platz", "Mirabellplatz"),
+                      ("Mozartplatz", "Mozartplatz"), ("Makartplatz", "Makartplatz"), ("gnigl", "Gnigl")])
+    func matches(heard: String, place: String) {
+        #expect(TripController.matchPlace([heard]) == place)
+    }
+
+    @Test(arguments: ["the mall", "Spar", "London Bridge", "Ikea"])
+    func unknownStaysUnmatched(heard: String) {
+        #expect(TripController.matchPlace([heard]) == nil)
+    }
+
+    @Test func laterAlternativeCanMatch() {
+        #expect(TripController.matchPlace(["oil bark yes", "Euro Park"]) == "Europark")
+    }
+}

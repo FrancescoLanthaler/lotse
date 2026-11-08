@@ -168,23 +168,49 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         guard !isRouteActive, !listeningForDestination else { return }
         audio.start()
         guard await VoiceInput.requestAccess() else {
-            await say("Microphone or speech recognition access is off. You can type the destination instead.")
+            await say("Microphone or speech recognition access is off. You can type the destination instead.", idle: true)
             return
         }
-        await say("Where to?")
+        await say("Where to?", idle: true)
         listeningForDestination = true
         let text = await voice.listen(timeout: 8, hints: Self.placeHints)
         listeningForDestination = false
         guard let text, !text.isEmpty else {
-            await say("I didn't catch that. Tap Where to and try again.")
+            await say("I didn't catch that. Tap Where to and try again.", idle: true)
             if !isRouteActive { audio.stop() }
             return
         }
-        start(destination: text)
+        start(destination: Self.matchPlace(voice.alternatives) ?? text)
+    }
+
+    /// The known place a transcription most likely meant ("Oil park" → "Europark"), nil if none is
+    /// close. Short names must match exactly, else "mall" would become "Mülln".
+    static func matchPlace(_ heard: [String], in places: [String] = placeHints) -> String? {
+        func norm<S: StringProtocol>(_ s: S) -> [Character] {
+            Array(s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+                .filter { $0.isLetter || $0.isNumber })
+        }
+        var best: (place: String, score: Double)?
+        for h in heard {
+            let words = h.split(separator: " ")
+            for i in words.indices {
+                for n in 1...3 where i + n <= words.count {            // "take me to Euro park"
+                    let w = norm(words[i..<(i + n)].joined())
+                    for p in places {
+                        let q = norm(p)
+                        let score = w == q ? 1
+                            : w.count >= 6 && q.count >= 6
+                            ? 1 - Double(q.difference(from: w).count) / Double(w.count + q.count) : 0
+                        if score >= 0.6, score > best?.score ?? 0 { best = (p, score) }
+                    }
+                }
+            }
+        }
+        return best?.place
     }
 
     // HACK: hand-picked Salzburg destinations so the English recogniser hears "Europark", not "Oilpark".
-    static let placeHints = [
+    nonisolated static let placeHints = [
         "Europark", "Mirabellplatz", "Getreidegasse", "Hauptbahnhof", "Hanuschplatz", "Ferdinand-Hanusch-Platz",
         "Residenzplatz", "Mozartplatz", "Kapitelplatz", "Domplatz", "Festspielhaus", "Makartplatz", "Linzergasse",
         "Kajetanerplatz", "Rathaus", "Messe Salzburg", "Salzburgarena", "Red Bull Arena", "Flughafen Salzburg",
@@ -194,8 +220,9 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     ]
 
     func start(destination: String) {
-        let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        var destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !destination.isEmpty else { return }
+        destination = Self.matchPlace([destination]) ?? destination     // also Siri's and typed text
         guard !isRouteActive else { speak("A route is already running. Stop it first."); return }
         phase = .planning
         plan = nil
@@ -212,6 +239,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             legs = plan.legs
             await say("\(Self.readback(plan.destination)). Starting route.")
             await say(Self.summary(plan))
+            guard phase == .planning else { return }          // stopped while speaking
             if head.isConnected {
                 needsCalibration = true
                 speak("To set the direction, hold your phone flat, pointing forward, and double-tap the screen. Or just start walking.")
@@ -285,28 +313,29 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     func stop() {
         guard isRouteActive || phase == .arrived else { return }
         if let id = pickupRequestId, phase == .waiting { Task { try? await driver.setStatus(request: id, "cancelled") } }
-        // Idle right away, so a plan or prompt still in flight can't carry on.
-        phase = .idle
-        setCamera(false)
-        prompter.cancel()
-        voice.cancel()
+        // Everything off right away: a plan, prompt or message still in flight finds the phase idle
+        // and stops there. Only the audio stays on for the last message.
+        end(keepAudio: true)
         audio.stopSpeaking()
         Task {
-            await say("Route stopped.")
-            if phase == .idle { end() }       // unless a new route started meanwhile
+            await say("Route stopped.", idle: true)
+            if phase == .idle { audio.stop() }       // unless a new route started meanwhile
         }
     }
 
-    private func end() {
+    private func end(keepAudio: Bool = false) {
         phase = .idle
         timer?.invalidate()
         timer = nil
         setCamera(false)
+        prompter.cancel()
+        voice.cancel()
         head.stop()
         locationManager.stopUpdatingLocation()
         locationManager.stopUpdatingHeading()
         locationManager.allowsBackgroundLocationUpdates = false
-        audio.stop()
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["scan"])
+        if !keepAudio { audio.stop() }
         resetTripState()
     }
 
@@ -318,12 +347,16 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         needsCalibration = false; timeShift = 0; simulating = false
     }
 
-    private func say(_ text: String) async {
+    /// Trip speech. Silent once the route is stopped (`idle`), so nothing from the old route is
+    /// spoken after "Route stopped."; `idle: true` is for the messages that belong there.
+    private func say(_ text: String, idle: Bool = false) async {
+        guard idle || phase != .idle else { return }
         lastSpoken = text
         await audio.say(text)
     }
 
     private func speak(_ text: String) {
+        guard phase != .idle else { return }
         lastSpoken = text
         audio.speak(text)
     }
@@ -575,6 +608,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         if exit {
             let label = lock.bay?.label ?? ""
             await say("You're at \(name)\(label.isEmpty ? "" : ", bay \(label)").")
+            guard case .scanning = phase else { return }
             exitScanDone()
             return
         }
@@ -587,6 +621,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
         if let target = targetBayId, target != bay.id {
             await say("This is the stop for the other direction. Your stop is across the street.")
+            guard case .scanning = phase else { return }
             if let targetBay = stopContext?.bays[target] { redirect(to: targetBay) }
             return
         }
@@ -704,6 +739,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         spotGuidance = nil
         Task {
             await say("You're at the waiting spot. \(busName) stops right here. You can put your phone away.")
+            guard phase == .waiting else { return }
             await setupDeparture()
         }
     }
@@ -872,7 +908,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         nearExitSince = nil
         if b.source == .transitous {
             await say("You're on \(busName.lowercased()), \(rideStops.count) stop\(rideStops.count == 1 ? "" : "s") to go.")
-            if rideStops.count == 1 { await askStopRequest() }
+            if rideStops.count == 1, phase == .riding { await askStopRequest() }
         } else {
             await say("You're on the bus. I'll tell you before \(b.alightingStop.spokenName).")
         }
@@ -904,7 +940,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
     /// "Next stop is Hanuschplatz, that's yours. Request the stop?" Never requested without a yes.
     private func askStopRequest() async {
-        guard !askedStopRequest, let b = bus else { return }
+        guard phase == .riding, !askedStopRequest, let b = bus else { return }
         askedStopRequest = true
         let exit = b.alightingStop.spokenName
         let answer = await prompter.ask("Next stop is \(exit), that's yours. Request the stop?")

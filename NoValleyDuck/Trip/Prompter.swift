@@ -43,13 +43,16 @@ final class Prompter {
     /// nil = no answer after asking twice (or cancelled). Questions never overlap: a second
     /// call waits until the first one is done.
     func ask(_ question: String, options: [PromptOption] = [.yes, .no]) async -> PromptOption? {
+        let cancels = self.cancels
         while busy { try? await Task.sleep(for: .milliseconds(200)) }
+        guard cancels == self.cancels else { return nil }   // route stopped while waiting
         busy = true
         defer { busy = false; pending = nil }
         pending = PendingPrompt(question: question, options: options)
         for attempt in 0..<2 {
             guard pending != nil else { return nil }          // cancelled
             await audio.say(attempt == 0 ? question : "Again: \(question)")
+            guard pending != nil else { return nil }          // cancelled while speaking
             if let a = await window(options) { return a }
         }
         log.info("no answer to: \(question, privacy: .public)")
@@ -69,9 +72,13 @@ final class Prompter {
     }
 
     func cancel() {
+        cancels += 1
         pending = nil
+        pendingTap = nil
         resolve(nil)
     }
+
+    @ObservationIgnored private var cancels = 0
 
     /// A tap while the question is still being spoken counts once the window opens.
     @ObservationIgnored private var pendingTap: PromptOption?
