@@ -114,6 +114,8 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
     var now: Date { Date().addingTimeInterval(timeShift) }
     var isRouteActive: Bool { phase != .idle && phase != .arrived }
+    /// Stops left until the exit stop while riding, for the rider screen (not observed: poll it).
+    var stopsToGo: Int? { phase == .riding && !rideStops.isEmpty ? rideStops.count - 1 - reachedStop : nil }
     private var busName: String { bus?.line.map { "Bus \($0)" } ?? "The bus" }
     private var stopName: String { bus?.boardingStop.spokenName ?? stopContext?.stop.name ?? "the stop" }
     private var lateralSign: Double { GuidanceEngine.portraitLateralSign * (pipeline.lateralFlipped ? -1 : 1) }

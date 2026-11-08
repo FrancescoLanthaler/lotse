@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// Developer screen for the marker pipeline. Not the rider UI.
 struct DebugView: View {
