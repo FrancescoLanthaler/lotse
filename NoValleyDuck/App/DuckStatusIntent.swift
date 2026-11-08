@@ -15,21 +15,6 @@ struct DuckStatusIntent: AppIntent {
     }
 }
 
-struct ShowMessageIntent: AppIntent {
-    static var title: LocalizedStringResource = "Show Note"
-    static var description = IntentDescription("Opens NoValleyDuck and displays the given text.")
-    static var openAppWhenRun = true
-
-    @Parameter(title: "Note")
-    var note: String
-
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        TripController.shared.siriMessage = note
-        return .result()
-    }
-}
-
 struct NoValleyDuckShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -39,14 +24,9 @@ struct NoValleyDuckShortcuts: AppShortcutsProvider {
             systemImageName: "camera.viewfinder"
         )
         AppShortcut(
-            intent: ShowMessageIntent(),
-            phrases: ["Do something weird in \(.applicationName)"],
-            shortTitle: "Show Note",
-            systemImageName: "text.bubble"
-        )
-        AppShortcut(
             intent: StartNavigationIntent(),
-            phrases: ["Navigate with \(.applicationName)", "Start \(.applicationName)",
+            // Not "Navigate with …": Siri takes "navigate" as a Maps request and never reaches the app.
+            phrases: ["Guide me with \(.applicationName)", "Start a trip with \(.applicationName)",
                       "Start guiding me with \(.applicationName)"],
             shortTitle: "Navigate",
             systemImageName: "figure.walk"

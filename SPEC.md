@@ -20,7 +20,7 @@ What already exists in the repo (`novalleyduck/`): a working AprilTag **tag25h9*
 ## 2. User journey
 
 ### Phase 1: Set destination
-1. "Hey Siri, navigate with NoValleyDuck." Siri: "Where to?" User: "Getreidegasse." (Two steps, because Siri can't take a free-text place inside the phrase.) Fallback: a big "Where to?" voice button in the app.
+1. "Hey Siri, guide me with NoValleyDuck." (Not "navigate with": Siri hands "navigate" to Maps.) Siri: "Where to?" User: "Getreidegasse." (Two steps, because Siri can't take a free-text place inside the phrase.) Fallback: a big "Where to?" voice button in the app.
 2. The app geocodes the destination (MapKit `MKLocalSearch`) and reads back the match: "Getreidegasse, Salzburg old town. Starting route."
 3. The app plans the trip: walk, bus line, walk.
 4. The app announces a summary: "Walk 4 minutes to Mirabellplatz, bus 2 towards Obergnigl, 3 stops, then walk 2 minutes."

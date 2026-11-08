@@ -22,7 +22,7 @@ SPEC.md                         product spec (source of truth)
 NoValleyDuck.xcodeproj          Xcode project, app target + NoValleyDuckTests (Swift Testing), scheme NoValleyDuck
 NoValleyDuck-Info.plist         extra Info.plist keys (background modes audio + location, file sharing)
 NoValleyDuck/
-  App/                          app entry, RiderView (main screen), Siri intents, DebugView (marker dev screen), Config (PocketBase URL)
+  App/                          app entry, RiderView (main screen), Siri intents ("Guide me with NoValleyDuck"), DebugView (marker dev screen), Config (PocketBase URL)
   Trip/                         TripController (the whole journey, SPEC §2), Prompter (questions + 8 s answer window),
                                 RouteGeometry (checkpoints, off-route), WaitingSpot (marker offsets → waiting spot)
   Audio/                        AudioGuide (one engine: HRTF beacon, earcons, speech), HeadTracker (AirPods yaw, nod/shake), VoiceInput
@@ -46,7 +46,7 @@ The Xcode project uses **file-system synchronized groups**. A new file inside `N
 ## Tech and conventions
 
 - Swift 6.4 compiler (Xcode 27), but the target builds in **Swift 5 language mode** (`SWIFT_VERSION = 5.0`, `SWIFT_APPROACHABLE_CONCURRENCY = YES`), so strict data-race checking is off. SwiftUI, iOS 17+. Bundle ID `com.novalleyduck.NoValleyDuck`.
-- State lives in `@Observable @MainActor` classes (see `App/Scanner.swift`). Camera frames are processed on a serial background queue and handed to the main actor.
+- State lives in `@Observable @MainActor` classes (see `Trip/TripController.swift`). Camera frames are processed on a serial background queue and handed to the main actor.
 - Logging uses `os.Logger` with subsystem `com.novalleyduck.NoValleyDuck` and a category per area (`tags`, `audio`, `route`, …).
 - Apple frameworks first: MapKit (geocoding, walking routes), AVAudioEngine + `AVAudioEnvironmentNode` (spatial audio), `CMHeadphoneMotionManager` (AirPods head tracking and gestures), CoreLocation, AVSpeechSynthesizer, App Intents (Siri). Ask before adding a dependency.
 - MapKit has **no** public-transport directions. Bus routes come from Transitous (`Navigation/TransitousClient.swift`, JSON API), with a MapKit-only fallback (SPEC §3).

@@ -54,10 +54,6 @@ struct RiderView: View {
                 Text("Waiting spot: \(g.clockHour) o'clock, \(g.distance, specifier: "%.1f") metres")
                     .font(.title2.bold())
             }
-            if let siri = trip.siriMessage {
-                Text(siri).font(.title3)
-                    .onTapGesture { trip.siriMessage = nil }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -89,9 +85,13 @@ struct RiderView: View {
                 }
                 .accessibilityHint("Say a destination, for example Getreidegasse.")
                 HStack {
-                    TextField("Or type a destination", text: $typed)
-                        .textFieldStyle(.roundedBorder)
+                    // Explicit colours: the system field is dark in dark mode, and the screen is always black.
+                    TextField("", text: $typed, prompt: Text("Or type a destination").foregroundStyle(.gray))
+                        .font(.title3)
+                        .padding(10)
+                        .background(.white, in: RoundedRectangle(cornerRadius: 10))
                         .foregroundStyle(.black)
+                        .accessibilityLabel("Destination")
                         .submitLabel(.go)
                         .onSubmit(go)
                     Button("Go", action: go).font(.title3.bold()).disabled(typed.isEmpty)

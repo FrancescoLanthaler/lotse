@@ -27,7 +27,8 @@ final class VoiceInput {
 
     /// Listens for up to `timeout` seconds. Returns early when `done` accepts the text so far
     /// (e.g. a "yes" was heard), else the final transcript. nil if nothing was understood.
-    func listen(timeout: TimeInterval, locale: Locale = .current,
+    /// `hints` are words the recogniser should prefer, e.g. German place names.
+    func listen(timeout: TimeInterval, locale: Locale = .current, hints: [String] = [],
                 done: @escaping (String) -> Bool = { _ in false }) async -> String? {
         cancel()
         #if targetEnvironment(simulator)
@@ -38,6 +39,7 @@ final class VoiceInput {
               recognizer.isAvailable else { return nil }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
+        request.contextualStrings = hints
         if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
         self.request = request
         latest = nil

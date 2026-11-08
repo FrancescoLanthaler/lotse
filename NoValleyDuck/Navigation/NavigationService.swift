@@ -172,7 +172,10 @@ final class NavigationService {
         } catch {
             throw NavigationError.destinationNotFound(query)
         }
-        guard let item = response.mapItems.first else { throw NavigationError.destinationNotFound(query) }
+        // The region is only a hint: a misheard name can match a place in London. Stay near the rider.
+        guard let item = response.mapItems.first(where: {
+            Coordinate($0.placemark.coordinate).distance(to: center) <= 50_000
+        }) else { throw NavigationError.destinationNotFound(query) }
         return Place(item, fallbackName: query)
     }
 

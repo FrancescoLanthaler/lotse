@@ -34,7 +34,6 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     private(set) var departure: Date?
     /// Debug: shifts the app's clock for the "fast-forward" button.
     private(set) var timeShift: TimeInterval = 0
-    var siriMessage: String?
 
     let pipeline = MarkerPipeline()
     let audio: AudioGuide
@@ -174,7 +173,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         }
         await say("Where to?")
         listeningForDestination = true
-        let text = await voice.listen(timeout: 8)
+        let text = await voice.listen(timeout: 8, hints: Self.placeHints)
         listeningForDestination = false
         guard let text, !text.isEmpty else {
             await say("I didn't catch that. Tap Where to and try again.")
@@ -183,6 +182,16 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         }
         start(destination: text)
     }
+
+    // HACK: hand-picked Salzburg destinations so the English recogniser hears "Europark", not "Oilpark".
+    static let placeHints = [
+        "Europark", "Mirabellplatz", "Getreidegasse", "Hauptbahnhof", "Hanuschplatz", "Ferdinand-Hanusch-Platz",
+        "Residenzplatz", "Mozartplatz", "Kapitelplatz", "Domplatz", "Festspielhaus", "Makartplatz", "Linzergasse",
+        "Kajetanerplatz", "Rathaus", "Messe Salzburg", "Salzburgarena", "Red Bull Arena", "Flughafen Salzburg",
+        "Hellbrunn", "Kleßheim", "Alpenstraße", "Lehen", "Itzling", "Gnigl", "Obergnigl", "Nonntal", "Mülln",
+        "Maxglan", "Liefering", "Parsch", "Aigen", "Anif", "Grödig", "Wals", "Taxham", "Zentrum im Berg",
+        "Unipark Nonntal", "Landeskrankenhaus", "Universität Salzburg", "Hofstallgasse", "Bürgerspitalgasse",
+    ]
 
     func start(destination: String) {
         let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -389,10 +398,12 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         }
 
         // Checkpoints: reached within 10 m. The last one (the stop or the destination) allows for
-        // GPS error up to 20 m, otherwise a 15 m fix could never "arrive".
+        // GPS error up to 20 m, otherwise a 15 m fix could never "arrive". Coarser fixes (indoors,
+        // Wi-Fi only) can't arrive at all: they put a rider inside a building at the stop next to it.
         let last = checkpoints.count - 1
         if let j = (checkpointIndex...last).last(where: { k in
-            let reach = k == last ? max(10, min(loc.horizontalAccuracy, 20)) : 10
+            if k == last, loc.horizontalAccuracy > 20 { return false }
+            let reach = k == last ? max(10, loc.horizontalAccuracy) : 10
             return checkpoints[k].coordinate.distance(to: p) <= reach
         }) {
             checkpointIndex = j + 1
