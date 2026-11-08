@@ -15,6 +15,10 @@ final class VoiceInput {
     private var latest: String?
     /// All candidate transcriptions of the last result, best first (for matching place names).
     private(set) var alternatives: [String] = []
+    /// What the second-language recogniser heard (see `alsoIn`), nil if nothing.
+    private(set) var otherLanguage: String?
+    private var otherTask: SFSpeechRecognitionTask?
+    private var otherRequest: SFSpeechAudioBufferRecognitionRequest?
     private var generation = 0          // ignores callbacks and timeouts of an earlier listen
 
     static func requestAccess() async -> Bool {
@@ -29,8 +33,9 @@ final class VoiceInput {
 
     /// Listens for up to `timeout` seconds. Returns early when `done` accepts the text so far
     /// (e.g. a "yes" was heard), else the final transcript. nil if nothing was understood.
-    /// `hints` are words the recogniser should prefer, e.g. German place names.
-    func listen(timeout: TimeInterval, locale: Locale = .current, hints: [String] = [],
+    /// `hints` are words the recogniser should prefer, e.g. German place names. `alsoIn` runs a
+    /// second recogniser on the same audio: a destination said in English can be a German name.
+    func listen(timeout: TimeInterval, locale: Locale = .current, hints: [String] = [], alsoIn other: Locale? = nil,
                 done: @escaping (String) -> Bool = { _ in false }) async -> String? {
         cancel()
         #if targetEnvironment(simulator)
@@ -48,13 +53,33 @@ final class VoiceInput {
         self.request = request
         latest = nil
         alternatives = []
+        otherLanguage = nil
         generation += 1
         let gen = generation
+
+        var second: SFSpeechAudioBufferRecognitionRequest?
+        if let other, let r2 = SFSpeechRecognizer(locale: other), r2.isAvailable {
+            let req = SFSpeechAudioBufferRecognitionRequest()
+            req.shouldReportPartialResults = true
+            req.contextualStrings = hints
+            second = req
+            otherRequest = req
+            otherTask = r2.recognitionTask(with: req) { [weak self] result, _ in
+                guard let text = result?.bestTranscription.formattedString, !text.isEmpty else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == gen else { return }
+                    self.otherLanguage = text
+                }
+            }
+        }
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else { return nil }
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer) }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            request.append(buffer)
+            second?.append(buffer)
+        }
         do {
             engine.prepare()
             try engine.start()
@@ -96,9 +121,13 @@ final class VoiceInput {
         task?.cancel()
         task = nil
         request = nil
+        otherRequest?.endAudio()
+        otherTask?.cancel()
+        otherTask = nil
+        otherRequest = nil
         let c = continuation
         continuation = nil
         c?.resume(returning: text)
-        if let text { log.info("heard: \(text, privacy: .public)") }
+        if let text { log.info("heard: \(text, privacy: .public), other language: \(self.otherLanguage ?? "-", privacy: .public)") }
     }
 }

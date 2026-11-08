@@ -173,18 +173,20 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         }
         await say("Where to?", idle: true)
         listeningForDestination = true
-        let text = await voice.listen(timeout: 8, hints: Self.placeHints)
+        let text = await voice.listen(timeout: 8, hints: Self.placeHints, alsoIn: Locale(identifier: "de-AT"))
         listeningForDestination = false
-        guard let text, !text.isEmpty else {
+        guard let text = text ?? voice.otherLanguage, !text.isEmpty else {
             await say("I didn't catch that. Tap Where to and try again.", idle: true)
             if !isRouteActive { audio.stop() }
             return
         }
-        start(destination: Self.matchPlace(voice.alternatives) ?? text)
+        start(destination: text, heard: voice.alternatives, german: voice.otherLanguage)
     }
 
     /// The known place a transcription most likely meant ("Oil park" → "Europark"), nil if none is
-    /// close. Short names must match exactly, else "mall" would become "Mülln".
+    /// close. Short names must match exactly, else "mall" would become "Mülln". "Salzburg" is ignored,
+    /// else "Cool Mama Hotel Salzburg" would become "Messe Salzburg". Only a fallback when the search
+    /// for the words as heard finds nothing.
     static func matchPlace(_ heard: [String], in places: [String] = placeHints) -> String? {
         func norm<S: StringProtocol>(_ s: S) -> [Character] {
             Array(s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
@@ -192,12 +194,12 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         }
         var best: (place: String, score: Double)?
         for h in heard {
-            let words = h.split(separator: " ")
+            let words = h.split(separator: " ").filter { norm($0) != norm("Salzburg") }
             for i in words.indices {
                 for n in 1...3 where i + n <= words.count {            // "take me to Euro park"
                     let w = norm(words[i..<(i + n)].joined())
                     for p in places {
-                        let q = norm(p)
+                        let q = norm(p.split(separator: " ").filter { norm($0) != norm("Salzburg") }.joined())
                         let score = w == q ? 1
                             : w.count >= 6 && q.count >= 6
                             ? 1 - Double(q.difference(from: w).count) / Double(w.count + q.count) : 0
@@ -219,22 +221,37 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         "Unipark Nonntal", "Landeskrankenhaus", "Universität Salzburg", "Hofstallgasse", "Bürgerspitalgasse",
     ]
 
-    func start(destination: String) {
-        var destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// When the search finds nothing for `destination`, the app tries what the German recogniser
+    /// heard, then the closest name from the place list (`heard` = the recogniser's other guesses).
+    func start(destination: String, heard: [String] = [], german: String? = nil) {
+        let destination = destination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !destination.isEmpty else { return }
-        destination = Self.matchPlace([destination]) ?? destination     // also Siri's and typed text
+        var fallbacks: [String] = []
+        for f in [german, Self.matchPlace(heard + [german, destination].compactMap { $0 })].compactMap({ $0 })
+        where !([destination] + fallbacks).contains(where: { $0.caseInsensitiveCompare(f) == .orderedSame }) {
+            fallbacks.append(f)
+        }
         guard !isRouteActive else { speak("A route is already running. Stop it first."); return }
         phase = .planning
         plan = nil
         beginSession()
-        Task { await planRoute(to: destination) }
+        Task { await planRoute(to: destination, fallbacks: fallbacks) }
     }
 
-    private func planRoute(to destination: String) async {
+    private func planRoute(to destination: String, fallbacks: [String]) async {
         speak("Looking for \(destination).")
         do {
-            let plan = try await navigation.plan(to: destination)
-            guard phase == .planning else { return }
+            var plan: NavigationPlan?
+            for (i, query) in ([destination] + fallbacks).enumerated() where plan == nil {
+                guard phase == .planning else { return }
+                if i > 0 { speak("Not found. Trying \(query).") }
+                do {
+                    plan = try await navigation.plan(to: query)
+                } catch NavigationError.destinationNotFound where i < fallbacks.count {
+                    continue
+                }
+            }
+            guard let plan, phase == .planning else { return }
             self.plan = plan
             legs = plan.legs
             await say("\(Self.readback(plan.destination)). Starting route.")

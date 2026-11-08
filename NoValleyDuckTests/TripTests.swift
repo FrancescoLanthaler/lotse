@@ -185,12 +185,13 @@ struct TripWordingTests {
 struct PlaceMatchTests {
     @Test(arguments: [("Oilpark", "Europark"), ("Euro park", "Europark"), ("take me to Europark", "Europark"),
                       ("Ferdinand Hanusch Platz", "Ferdinand-Hanusch-Platz"), ("Mirabell Platz", "Mirabellplatz"),
-                      ("Mozartplatz", "Mozartplatz"), ("Makartplatz", "Makartplatz"), ("gnigl", "Gnigl")])
+                      ("Mozartplatz", "Mozartplatz"), ("Makartplatz", "Makartplatz"), ("gnigl", "Gnigl"),
+                      ("Messe", "Messe Salzburg"), ("Europark Salzburg", "Europark")])
     func matches(heard: String, place: String) {
         #expect(TripController.matchPlace([heard]) == place)
     }
 
-    @Test(arguments: ["the mall", "Spar", "London Bridge", "Ikea"])
+    @Test(arguments: ["the mall", "Spar", "London Bridge", "Ikea", "cool mama hotel Salzburg", "Hotel Salzburg"])
     func unknownStaysUnmatched(heard: String) {
         #expect(TripController.matchPlace([heard]) == nil)
     }
