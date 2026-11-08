@@ -12,7 +12,6 @@ struct RiderView: View {
     @State private var showRouteTest = false
     @State private var showGestureTest = false
     @AppStorage("showRouteMap") private var showMap = false
-    @AccessibilityFocusState private var promptFocused: Bool
 
     private var scanning: Bool {
         if case .scanning = trip.phase { return true }
@@ -62,7 +61,6 @@ struct RiderView: View {
         }
         .sheet(isPresented: $showRouteTest) { NavigationDebugView() }
         .sheet(isPresented: $showGestureTest) { HeadGestureTestView(trip: trip) }
-        .onChange(of: trip.prompter.pending) { _, p in promptFocused = p != nil }
         // VoiceOver two-finger double-tap: the current main action, wherever focus is.
         .accessibilityAction(.magicTap) {
             if trip.prompter.pending != nil { return }
@@ -148,7 +146,6 @@ struct RiderView: View {
                     .font(.title.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityFocused($promptFocused)
                 ForEach(prompt.options) { option in
                     let secondary = option.id == "no" || option.id == "notYet"
                     BigButton(option.label, style: secondary ? .secondary : .primary) {
@@ -221,6 +218,7 @@ struct RiderView: View {
                 .underline()
             Spacer()
             Menu {
+                Button("Skip walk (I'm at the stop)") { trip.skipWalk() }
                 Button("Fast-forward bus time") { trip.fastForward() }
                 Button("Simulate ride") { trip.simulateRide() }
                 Button("Skip marker scan") { trip.skipScan() }

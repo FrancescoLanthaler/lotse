@@ -95,7 +95,7 @@ struct DebugView: View {
         guard let ctx = pipeline.stop else {
             return pipeline.location.authorization == .denied ? "No stop: location denied" : "No stop nearby"
         }
-        let src = pipeline.location.source == .demo ? "demo" :
+        let src = pipeline.location.source == .demo ? "demo" : pipeline.location.source == .trip ? "trip" :
             pipeline.location.distanceToStop.map { "GPS \(Int($0)) m" } ?? "GPS"
         let tags = ctx.markers.keys.sorted().map(String.init).joined(separator: ",")
         return "\(ctx.stop.name) (\(src)) · IDs \(tags.isEmpty ? "none" : tags)"

@@ -29,7 +29,7 @@ enum StopSelector {
 @Observable
 @MainActor
 final class LocationGate {
-    enum Source: String, Sendable { case none, gps, demo }
+    enum Source: String, Sendable { case none, gps, demo, trip }
 
     private(set) var context: StopContext?
     private(set) var source: Source = .none
@@ -37,6 +37,9 @@ final class LocationGate {
     private(set) var authorization: CLAuthorizationStatus = .notDetermined
     /// Hidden demo switch: in the hall GPS says Messezentrum, so force the demo stop.
     private(set) var demoOverride = UserDefaults.standard.bool(forKey: "demoStopOverride")
+    /// The stop the trip is scanning at. Wins over GPS, which can pick a neighbouring stop or,
+    /// indoors, none at all, and over the demo override (the trip falls back to the demo stop itself).
+    private(set) var pinnedStop: Stop?
 
     /// Called whenever `context` changes.
     @ObservationIgnored var onChange: ((StopContext?) -> Void)?
@@ -80,6 +83,13 @@ final class LocationGate {
         Task { await apply() }
     }
 
+    /// Set by the trip for a marker scan; nil hands the choice back to GPS.
+    func pin(_ stop: Stop?) {
+        guard stop?.id != pinnedStop?.id else { return }
+        pinnedStop = stop
+        Task { await apply() }
+    }
+
     private func handle(_ loc: CLLocation) async {
         guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= 100 else { return }
         location = loc
@@ -94,21 +104,22 @@ final class LocationGate {
         }
     }
 
-    /// Resolve the active stop (demo override wins) and load its markers.
+    /// The active stop: the trip's pinned stop, then the demo override, then GPS.
+    private var target: (stop: Stop, source: Source)? {
+        if let pinnedStop { return (pinnedStop, .trip) }
+        if demoOverride, let demo = DemoBundle.shared?.stop { return (demo, .demo) }
+        return gpsStop.map { ($0, .gps) }
+    }
+
+    /// Resolve the active stop and load its markers.
     private func apply() async {
-        let target: (Stop, Source)?
-        if demoOverride, let demo = DemoBundle.shared?.stop {
-            target = (demo, .demo)
-        } else {
-            target = gpsStop.map { ($0, .gps) }
-        }
         guard let (stop, src) = target else {
             if context != nil { context = nil; source = .none; onChange?(nil) }
             return
         }
         let ctx = await repository.context(for: stop)
         // A newer selection may have happened while we were loading.
-        let still = demoOverride ? (src == .demo) : (src == .gps && gpsStop?.id == stop.id)
+        let still = target.map { $0.stop.id == stop.id && $0.source == src } ?? false
         guard still, ctx != context || source != src else { return }
         context = ctx
         source = src

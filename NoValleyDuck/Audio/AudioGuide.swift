@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 import os
 
 private let log = Logger(subsystem: "com.novalleyduck.NoValleyDuck", category: "audio")
@@ -23,7 +24,13 @@ final class AudioGuide: NSObject, AVSpeechSynthesizerDelegate {
     private(set) var running = false
     private let beaconVolume: Float = 0.7
 
-    var isSpeaking: Bool { synthesizer.isSpeaking }
+    var isSpeaking: Bool { synthesizer.isSpeaking || announcing > 0 }
+    private var announcing = 0
+
+    /// Screen on with VoiceOver: messages go to VoiceOver, so only one voice ever talks.
+    static var useVoiceOver: Bool {
+        UIAccessibility.isVoiceOverRunning && UIApplication.shared.applicationState == .active
+    }
 
     override init() {
         super.init()
@@ -148,6 +155,7 @@ final class AudioGuide: NSObject, AVSpeechSynthesizerDelegate {
     /// order, so two messages never overlap.
     func say(_ text: String) async {
         log.info("say: \(text, privacy: .public)")
+        if Self.useVoiceOver { await announce(text); return }
         let u = AVSpeechUtterance(string: text)
         u.voice = AVSpeechSynthesisVoice(language: "en-US")
         u.rate = AVSpeechUtteranceDefaultSpeechRate
@@ -157,6 +165,28 @@ final class AudioGuide: NSObject, AVSpeechSynthesizerDelegate {
             waiters[ObjectIdentifier(u)] = cont
             synthesizer.speak(u)
         }
+    }
+
+    /// VoiceOver queues its own speech and a swipe interrupts it instead of talking over it.
+    /// Returns when VoiceOver is done (or interrupted); the timeout covers a missing notification.
+    private func announce(_ text: String) async {
+        while synthesizer.isSpeaking { try? await Task.sleep(for: .milliseconds(100)) }
+        announcing += 1
+        beacon.volume = beaconVolume * 0.2
+        let done = Task {
+            for await n in NotificationCenter.default.notifications(named: UIAccessibility.announcementDidFinishNotification)
+            where n.userInfo?[UIAccessibility.announcementStringValueUserInfoKey] as? String == text { return }
+        }
+        UIAccessibility.post(notification: .announcement,
+                             argument: NSAttributedString(string: text, attributes: [.accessibilitySpeechQueueAnnouncement: true]))
+        let timeout = Task {
+            try? await Task.sleep(for: .seconds(Double(text.count) / 10 + 3))
+            done.cancel()
+        }
+        await done.value
+        timeout.cancel()
+        announcing -= 1
+        if !isSpeaking { beacon.volume = beaconVolume }
     }
 
     /// Fire-and-forget variant.
@@ -180,7 +210,7 @@ final class AudioGuide: NSObject, AVSpeechSynthesizerDelegate {
 
     private func finished(_ id: ObjectIdentifier) {
         waiters.removeValue(forKey: id)?.resume()
-        if !synthesizer.isSpeaking { beacon.volume = beaconVolume }
+        if !isSpeaking { beacon.volume = beaconVolume }
     }
 
     // MARK: - Sounds

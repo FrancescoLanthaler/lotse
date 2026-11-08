@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>Driver Screen</title>
+<!--
+  NoValleyDuck driver screen (SPEC §3 "Driver side"). Shows, for one bus line:
+  - pickups: `requests` records the rider app creates after a nod at "Board bus X?"
+  - stop requests: `facts` with key "stop_requested" (DriverClient.stopRequest)
+  Live via PocketBase realtime (SSE), plus a 10 s poll as a safety net.
+  Deploy: copy this folder to pb_public/driver/ on the PocketBase server → /driver/?line=1
+  No login: collections are public-read, and anonymous updates may only change `status`.
+-->
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #161a20; --panel-2: #1e242c; --line: #2b323c;
+    --text: #f4f6f8; --muted: #9aa5b1;
+    --alert: #ffcf33; --alert-ink: #1a1400;
+    --ok: #3ddc84; --stop: #ff7a45; --bad: #ff5a5a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 18px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; }
+  .hidden { display: none !important; }
+
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .line-chip {
+    background: var(--text); color: var(--bg); font-weight: 800; font-size: 26px;
+    padding: 4px 16px; border-radius: 10px; min-width: 64px; text-align: center;
+  }
+  .title { font-weight: 600; color: var(--muted); }
+  .spacer { flex: 1; }
+  .conn { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--bad); }
+  .conn.live .dot { background: var(--ok); }
+  .clock { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  main { padding: 18px 0 32px; display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
+
+  .empty {
+    text-align: center; color: var(--muted); padding: 12vh 16px;
+    border: 2px dashed var(--line); border-radius: 20px;
+  }
+  .empty strong { display: block; color: var(--text); font-size: 30px; margin-bottom: 6px; }
+
+  .card {
+    background: var(--panel); border-radius: 20px; padding: 22px 24px;
+    display: grid; grid-template-columns: 1fr auto; gap: 8px 20px; align-items: center;
+    border: 3px solid transparent;
+  }
+  .card .kicker { font-size: 15px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .card .stop { font-size: clamp(30px, 6vw, 56px); font-weight: 800; line-height: 1.05; }
+  .card .who { font-size: 22px; font-weight: 600; }
+  .card .meta { color: var(--muted); font-size: 18px; }
+  .card .tip { color: var(--muted); font-size: 16px; margin-top: 6px; }
+  .card .body { display: grid; gap: 6px; min-width: 0; }
+  .card .stop, .card .who { overflow-wrap: anywhere; }
+
+  .pickup.waiting { border-color: var(--alert); }
+  .pickup.waiting .kicker { color: var(--alert); }
+  .pickup.seen { border-color: var(--ok); }
+  .pickup.seen .kicker { color: var(--ok); }
+  .pickup.later { padding: 16px 22px; background: var(--panel-2); }
+  .pickup.later .stop { font-size: 30px; }
+  .stopreq { border-color: var(--stop); }
+  .stopreq .kicker { color: var(--stop); }
+
+  .btn {
+    min-width: 170px; min-height: 76px; padding: 0 24px; border-radius: 16px;
+    font-size: 24px; font-weight: 800;
+  }
+  .btn.primary { background: var(--alert); color: var(--alert-ink); }
+  .btn.quiet { background: var(--panel-2); border: 2px solid var(--line); }
+  .btn:active { transform: scale(.98); }
+  .done { color: var(--ok); font-weight: 800; font-size: 22px; text-align: right; }
+
+  .flash { animation: flash 0.6s ease-in-out 4; }
+  @keyframes flash { 50% { background: #3a3000; } }
+  @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
+
+  .setup {
+    position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; padding: 16px; z-index: 5;
+  }
+  .setup form { width: min(440px, 100%); display: grid; gap: 16px; }
+  .setup h1 { margin: 0; font-size: 34px; }
+  .setup p { margin: 0; color: var(--muted); }
+  .setup label { font-weight: 700; }
+  .setup input {
+    font: inherit; font-size: 40px; font-weight: 800; text-align: center; width: 100%;
+    padding: 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  .setup .btn { width: 100%; }
+  .error { color: var(--bad); font-size: 16px; }
+
+  @media (max-width: 640px) {
+    .card { grid-template-columns: 1fr; }
+    .btn { width: 100%; }
+    .done { text-align: left; }
+    .clock { font-size: 22px; }
+    .title { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="setup" id="setup">
+  <form id="setupForm">
+    <h1>Driver screen</h1>
+    <p>Shows passengers who need help boarding or want to get off, for your line.</p>
+    <label for="lineInput">Line</label>
+    <input id="lineInput" inputmode="text" autocomplete="off" placeholder="1" required>
+    <button class="btn primary" type="submit">Start shift</button>
+    <p class="error hidden" id="setupError"></p>
+  </form>
+</div>
+
+<header>
+  <button class="line-chip" id="lineChip" aria-label="Change line">–</button>
+  <span class="title">Driver screen</span>
+  <span class="spacer"></span>
+  <span class="conn" id="conn" role="status"><span class="dot" aria-hidden="true"></span><span id="connText">Connecting…</span></span>
+  <span class="clock" id="clock" aria-hidden="true">--:--</span>
+</header>
+
+<main id="main" aria-live="polite"></main>
+
+<script>
+(() => {
+  const DEFAULT_PB = "https://novalleyduck.novafox.at";
+  const params = new URLSearchParams(location.search);
+  // Served from pb_public: same origin. Opened as a file or from elsewhere: the default server.
+  const PB = params.get("pb") || (location.protocol.startsWith("http") && location.hostname.endsWith("novafox.at")
+    ? location.origin : DEFAULT_PB);
+  // The app stores expires_at = scheduled departure + 20 min (DriverClient.pickup).
+  const EXPIRY_AFTER_DEPARTURE_MS = 20 * 60 * 1000;
+  const STOP_REQUEST_WINDOW_MS = 30 * 60 * 1000;
+
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  let line = params.get("line") || store.get("driver.line", "");
+  let pickups = [], stopRequests = [];
+  let known = new Set();            // ids already shown, to chime only for new ones
+  let firstLoad = true;
+  let dismissed = new Set(JSON.parse(store.get("driver.dismissed", "[]")));
+  let audio = null, wakeLock = null, refreshTimer = null;
+
+  // ---------- PocketBase ----------
+  const q = (s) => '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  const pbDate = (d) => d.toISOString().replace("T", " ");
+
+  async function api(path, opts = {}) {
+    const r = await fetch(PB + path, { headers: { "Content-Type": "application/json" }, ...opts });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.status === 204 ? null : r.json();
+  }
+
+  function list(collection, filter, sort, expand) {
+    const p = new URLSearchParams({ filter, sort, perPage: "50", skipTotal: "1" });
+    if (expand) p.set("expand", expand);
+    return api(`/api/collections/${collection}/records?${p}`).then((r) => r.items);
+  }
+
+  async function refresh() {
+    if (!line) return;
+    try {
+      const since = pbDate(new Date(Date.now() - STOP_REQUEST_WINDOW_MS));
+      [pickups, stopRequests] = await Promise.all([
+        list("requests", `line = ${q(line)} && (status = "waiting" || status = "seen") && expires_at > @now`,
+             "expires_at", "stop,bay"),
+        list("facts", `subject_type = "vehicle" && subject_id = ${q(line)} && key = "stop_requested" && created >= ${q(since)}`,
+             "-created"),
+      ]);
+      stopRequests = stopRequests.filter((f) => !dismissed.has(f.id));
+      setConn(true);
+      render();
+    } catch (e) {
+      setConn(false, "Offline, retrying…");
+    }
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refresh, 150);   // several events often arrive together
+  }
+
+  // Realtime: SSE connect → clientId → subscribe. EventSource reconnects by itself.
+  let es = null;
+  function connectRealtime() {
+    if (es) es.close();
+    es = new EventSource(PB + "/api/realtime");
+    es.addEventListener("PB_CONNECT", async (ev) => {
+      try {
+        const { clientId } = JSON.parse(ev.data);
+        await api("/api/realtime", { method: "POST", body: JSON.stringify({ clientId, subscriptions: ["requests", "facts"] }) });
+        setConn(true);
+        refresh();
+      } catch { setConn(false, "Reconnecting…"); }
+    });
+    es.addEventListener("requests", scheduleRefresh);
+    es.addEventListener("facts", scheduleRefresh);
+    es.onerror = () => setConn(false, "Reconnecting…");
+  }
+
+  async function markSeen(id, button) {
+    button.disabled = true;
+    try {
+      await api(`/api/collections/requests/records/${id}`, { method: "PATCH", body: JSON.stringify({ status: "seen" }) });
+      const p = pickups.find((x) => x.id === id);
+      if (p) p.status = "seen";
+      render();
+    } catch {
+      button.disabled = false;
+      button.textContent = "Retry";
+    }
+  }
+
+  function dismissStopRequest(id) {
+    dismissed.add(id);
+    store.set("driver.dismissed", JSON.stringify([...dismissed].slice(-200)));
+    stopRequests = stopRequests.filter((f) => f.id !== id);
+    render();
+  }
+
+  // ---------- Rendering ----------
+  const time = (d) => d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const parse = (s) => new Date(s.replace(" ", "T"));
+
+  function due(p) {
+    const dep = new Date(parse(p.expires_at).getTime() - EXPIRY_AFTER_DEPARTURE_MS);
+    const min = Math.round((dep - Date.now()) / 60000);
+    const rel = min > 1 ? `in ${min} min` : min >= -1 ? "now" : `${-min} min ago (bus late?)`;
+    return `Due ${time(dep)} · ${rel}`;
+  }
+
+  const NEEDS = {
+    blind: "Blind or visually impaired passenger",
+    wheelchair: "Passenger in a wheelchair",
+    pram: "Passenger with a pram",
+    language: "Passenger who needs help with the language",
+  };
+  const TIPS = {
+    blind: "Stop with the front door at the stop pole and say the line number when the door opens.",
+    wheelchair: "Stop at the kerb and have the ramp ready.",
+  };
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function pickupCard(p, isNext) {
+    const stop = p.expand?.stop?.name || "Unknown stop";
+    const bay = p.expand?.bay?.label;
+    const needs = (Array.isArray(p.needs) ? p.needs : [p.needs]).filter(Boolean);
+    const card = el("section", `card pickup ${p.status}${isNext ? "" : " later"}`);
+    card.setAttribute("aria-label", `Pickup at ${stop}`);
+    const body = el("div", "body");
+    body.append(el("div", "kicker", p.status === "seen" ? "Pickup · seen"
+                                     : isNext ? "Passenger waiting · next pickup" : "Passenger waiting · later"));
+    body.append(el("div", "stop", stop.replace(/^Salzburg /, "")));
+    body.append(el("div", "who", needs.map((n) => NEEDS[n] || n).join(" · ") || "Passenger needs help boarding"));
+    body.append(el("div", "meta", [bay ? `Bay ${bay}` : null, due(p)].filter(Boolean).join(" · ")));
+    const tip = needs.map((n) => TIPS[n]).filter(Boolean)[0];
+    if (tip && isNext) body.append(el("div", "tip", tip));
+    card.append(body);
+    if (p.status === "waiting") {
+      const b = el("button", "btn primary", "Seen ✓");
+      b.setAttribute("aria-label", `Mark pickup at ${stop} as seen`);
+      b.onclick = () => markSeen(p.id, b);
+      card.append(b);
+    } else {
+      card.append(el("div", "done", "✓ Seen"));
+    }
+    return card;
+  }
+
+  function stopRequestCard(f) {
+    const card = el("section", "card stopreq");
+    card.setAttribute("aria-label", `Stop requested at ${f.value}`);
+    const body = el("div", "body");
+    body.append(el("div", "kicker", "Stop requested"));
+    body.append(el("div", "stop", String(f.value).replace(/^Salzburg /, "")));
+    body.append(el("div", "who", "A visually impaired passenger wants to get off here."));
+    body.append(el("div", "meta", `Requested ${time(parse(f.created))}`));
+    card.append(body);
+    const b = el("button", "btn quiet", "OK");
+    b.setAttribute("aria-label", `Dismiss stop request at ${f.value}`);
+    b.onclick = () => dismissStopRequest(f.id);
+    card.append(b);
+    return card;
+  }
+
+  function render() {
+    const main = $("main");
+    main.replaceChildren();
+    const ids = [...stopRequests.map((f) => f.id), ...pickups.map((p) => p.id)];
+    const fresh = new Set(ids.filter((id) => !known.has(id)));
+    ids.forEach((id) => known.add(id));
+
+    stopRequests.forEach((f) => main.append(stopRequestCard(f)));
+    pickups.forEach((p, i) => main.append(pickupCard(p, i === 0)));
+    if (!ids.length) {
+      const e = el("div", "empty");
+      e.append(el("strong", null, "No requests"), `Nobody on line ${line} needs help right now.`);
+      main.append(e);
+    }
+    if (!firstLoad && fresh.size) {
+      [...main.children].forEach((c, i) => { if (fresh.has(ids[i])) c.classList.add("flash"); });
+      chime();
+    }
+    firstLoad = false;
+  }
+
+  function setConn(live, text) {
+    $("conn").classList.toggle("live", live);
+    $("connText").textContent = live ? "Live" : text;
+  }
+
+  // Two rising tones; needs a tap first (browser autoplay rules), which "Start shift" gives.
+  function chime() {
+    if (!audio) return;
+    const t0 = audio.currentTime;
+    [[880, 0], [1320, 0.22], [880, 0.6], [1320, 0.82]].forEach(([f, at]) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = f; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, t0 + at);
+      g.gain.exponentialRampToValueAtTime(0.5, t0 + at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.2);
+      o.connect(g).connect(audio.destination);
+      o.start(t0 + at); o.stop(t0 + at + 0.22);
+    });
+  }
+
+  async function keepAwake() {
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
+  }
+
+  // ---------- Setup ----------
+  function start(newLine) {
+    line = newLine.trim();
+    store.set("driver.line", line);
+    const u = new URL(location.href); u.searchParams.set("line", line); history.replaceState(null, "", u);
+    $("lineChip").textContent = line;
+    $("setup").classList.add("hidden");
+    known = new Set(); firstLoad = true;
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {}
+    keepAwake();
+    refresh();
+    if (!es) connectRealtime();
+  }
+
+  $("setupForm").onsubmit = (e) => {
+    e.preventDefault();
+    const v = $("lineInput").value.trim();
+    if (!v) return;
+    start(v);
+  };
+  $("lineChip").onclick = () => {
+    $("lineInput").value = line;
+    $("setup").classList.remove("hidden");
+    $("lineInput").focus();
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") { keepAwake(); refresh(); }
+  });
+
+  function tick() {
+    $("clock").textContent = time(new Date());
+  }
+  setInterval(tick, 1000); tick();
+  setInterval(refresh, 10000);          // safety net if the SSE stream silently stalls
+  setInterval(() => line && render(), 30000);   // keep "in N min" current
+
+  $("lineInput").value = line;
+  if (line) $("lineChip").textContent = line;
+})();
+</script>
+</body>
+</html>

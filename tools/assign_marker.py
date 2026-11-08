@@ -3,8 +3,9 @@
 
     export PB_EMAIL=... PB_PASSWORD=...
     python3 tools/assign_marker.py list [--stop "Salzburg Hauptbahnhof"]
-    python3 tools/assign_marker.py bays "Salzburg Mirabellplatz"         # find bay labels
+    python3 tools/assign_marker.py bays "Salzburg Mirabellplatz"         # bay labels/ids + directions
     python3 tools/assign_marker.py bay  "Salzburg Hauptbahnhof" A 0 --size 0.145
+    python3 tools/assign_marker.py bay  "Salzburg Messe" b09a9cc04f09183 0 --size 0.145   # unlabelled bay: id
     python3 tools/assign_marker.py bay  "Salzburg Hauptbahnhof" A 0 --size 0.145 --entrance
     python3 tools/assign_marker.py door 120 25 --size 0.145
     python3 tools/assign_marker.py size 0 0.148 --stop "Salzburg Hauptbahnhof"   # re-measured
@@ -57,12 +58,26 @@ def refresh_demo(pb, changed_stop_id=None):
     print("refreshed NoValleyDuck/Data/DemoStop.json (rebuild the app to bundle it)")
 
 
+def directions(pb, stop_id):
+    """Most frequent headsigns per bay id, from the stop's timetable: tells unlabelled bays apart."""
+    tts = pb.list_all("timetables", filter=f'stop = "{stop_id}"')
+    if not tts:
+        return {}
+    d, counts = tts[0]["data"], {}
+    for dep in d["deps"]:
+        key = f"{d['lines'][dep[1]]} {d['headsigns'][dep[2]]}"
+        per_bay = counts.setdefault(d["bays"][dep[0]], {})
+        per_bay[key] = per_bay.get(key, 0) + 1
+    return {bay: sorted(c, key=c.get, reverse=True)[:5] for bay, c in counts.items()}
+
+
 def describe(m):
     e = m.get("expand", {})
     if m["kind"] == "vehicle":
         where = f"bus door line {m['vehicle_line']}"
     else:
-        where = f"{e.get('stop', {}).get('name', '?')} {m['kind']} {e.get('bay', {}).get('label', '?')}"
+        bay = e.get("bay", {})
+        where = f"{e.get('stop', {}).get('name', '?')} {m['kind']} {bay.get('label') or bay.get('id', '?')}"
     return f"ID {m['tag_id']:>2}  {m['size_m'] * 100:5.1f} cm  {where}"
 
 
@@ -100,25 +115,30 @@ def main():
 
     elif a.cmd == "bays":
         stop = find_stop(pb, a.stop)
+        towards = directions(pb, stop["id"])
         for b in sorted(pb.list_all("bays", filter=f'stop = "{stop["id"]}"'), key=lambda b: b["label"]):
-            print(f"{b['label'] or '(no label)':>10}  lines {' '.join(b['lines'] or []) or '-'}  ({b['id']})")
+            print(f"{b['label'] or '(no label)':>10}  {b['id']}  lines {' '.join(b['lines'] or []) or '-'}")
+            if towards.get(b["id"]):
+                print(f"{'':>12}towards {', '.join(towards[b['id']])}")
 
     elif a.cmd == "bay":
         if a.tag not in BAY_TAGS:
             sys.exit("bay/entrance markers use IDs 0–24 (25–34 are bus doors)")
         stop = find_stop(pb, a.stop)
-        bays = [b for b in pb.list_all("bays", filter=f'stop = "{stop["id"]}"') if b["label"] == a.label]
+        bays = [b for b in pb.list_all("bays", filter=f'stop = "{stop["id"]}"') if a.label in (b["label"], b["id"])]
         if not bays:
             sys.exit(f"no bay {a.label!r} at {stop['name']}; see: assign_marker.py bays {q(stop['name'])}")
+        if len(bays) > 1 and not bays[0]["label"]:
+            sys.exit("several unlabelled bays: give the bay id instead (see the bays command)")
         bay = sorted(bays, key=lambda b: b["gtfs_id"])[0]   # same label twice (e.g. two "F"): first platform
         m = {"id": pb_id("m", f"{stop['id']}:{a.tag}"), "stop": stop["id"], "tag_id": a.tag,
              "kind": "entrance" if a.entrance else "bay", "bay": bay["id"], "vehicle_line": "",
-             "size_m": check_size(a.size), "note": f"Bay {a.label}"}
+             "size_m": check_size(a.size), "note": f"Bay {bay['label'] or bay['id']}"}
         clash = pb.list_all("markers", filter=f'stop = "{stop["id"]}" && tag_id = {a.tag}')
         if clash and clash[0]["id"] != m["id"]:
             pb.request("DELETE", f"/api/collections/markers/records/{clash[0]['id']}")
         pb.batch_upsert("markers", [m])
-        print(f"ID {a.tag} → {stop['name']} bay {a.label}, {a.size * 100:.1f} cm")
+        print(f"ID {a.tag} → {stop['name']} bay {bay['label'] or bay['id']}, {a.size * 100:.1f} cm")
         refresh_demo(pb, stop["id"])
 
     elif a.cmd == "door":
