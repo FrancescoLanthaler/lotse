@@ -1,7 +1,20 @@
-# HaltMal (NoValleyDuck)
+# Lotse
 
-iPhone app that finds AprilTag markers at bus stops and guides a blind rider to the right bay.
-Build spec: [_specs/spec.md](_specs/spec.md).
+![Lotse: door to door through Salzburg for blind and visually impaired travellers. Bus included.](docs/banner.png)
+
+**Lotse** (German for a harbour pilot, the one who guides ships safely into port) is an iPhone app that
+guides blind and visually impaired travellers door to door through Salzburg, bus ride included.
+
+* **Spatial audio:** a beacon in the AirPods Pro plays from the direction to walk in.
+* **Stop markers:** printed AprilTag markers at the stop tell the camera which side of the street and
+  which bay the rider is at, and lead them to the waiting spot.
+* **Head gestures:** nod to answer yes ("Board bus 2?"), shake for no. Voice and one large on-screen
+  button work too.
+* **Siri:** "Guide me with Lotse" starts a trip by voice.
+* **Driver screen:** the bus driver gets a heads-up when someone is waiting and when they want to get off.
+
+Built at the Tourism Hackathon 2026 in Salzburg. Product spec: [SPEC.md](SPEC.md). The Xcode project
+and code still use the working name `NoValleyDuck`, so the target, scheme and folders keep that name.
 
 ## Marker pipeline (branch `feat/marker-detection`)
 
@@ -63,7 +76,7 @@ python3 tools/assign_marker.py list
 Each processed frame becomes CSV rows: `t_s, frame, stop, id, hamming, margin, side_px, status,
 distance_m, bearing_deg, locked`. During recording the toggle shows how many locks happened.
 For the false-positive test, that number must stay 0 with no demo markers in view. Get the files from
-Finder (iPhone → Files → NoValleyDuck), from the Files app, or with the share button.
+Finder (iPhone → Files → Lotse), from the Files app, or with the share button.
 
 * **Range:** walk away in 1 m steps and see where `margin` drops and the rows stop.
 * **Margin threshold:** pick `minMargin` above the margins of weak or false rows, and below the margins
