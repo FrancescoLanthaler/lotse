@@ -3,120 +3,153 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0d10">
-<title>Driver Screen</title>
+<meta name="theme-color" content="#111110">
+<title>Lotse Driver</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='114' fill='%23ffd400'/%3E%3Ccircle cx='256' cy='256' r='148' fill='none' stroke='%23111110' stroke-opacity='.55' stroke-width='14'/%3E%3Cpath d='M329.4 182.6 L263 328.5 L242.4 269.6 L183.5 249 Z' fill='%23111110' stroke='%23111110' stroke-width='17.6' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Hanken+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <!--
-  NoValleyDuck driver screen (SPEC §3 "Driver side"). Shows, for one bus line:
+  Lotse driver screen (SPEC §3 "Driver side"). Shows, for one bus line:
   - pickups: `requests` records the rider app creates after a nod at "Board bus X?"
   - stop requests: `facts` with key "stop_requested" (DriverClient.stopRequest)
   Live via PocketBase realtime (SSE), plus a 10 s poll as a safety net.
   Deploy: copy this folder to pb_public/driver/ on the PocketBase server → /driver/?line=1
   No login: collections are public-read, and anonymous updates may only change `status`.
+  Look: the Lotse deck (bus-stop yellow, black, cream; Archivo Black + IBM Plex Mono + Hanken Grotesk).
 -->
 <style>
   :root {
-    --bg: #0b0d10; --panel: #161a20; --panel-2: #1e242c; --line: #2b323c;
-    --text: #f4f6f8; --muted: #9aa5b1;
-    --alert: #ffcf33; --alert-ink: #1a1400;
-    --ok: #3ddc84; --stop: #ff7a45; --bad: #ff5a5a;
-    color-scheme: dark;
+    --bg: #f3f0e7; --paper: #ffffff; --ink: #111110; --ink-2: #2e2e2b;
+    --muted: #4a4945; --line: #dfdacd;
+    --yellow: #ffd400; --green: #006b38; --red: #b3001b;
+    --display: "Archivo Black", "Arial Black", Impact, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; min-height: 100%; }
   body {
-    background: var(--bg); color: var(--text);
-    font: 18px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--ink);
+    font: 500 18px/1.35 var(--sans);
     -webkit-font-smoothing: antialiased;
-    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    padding: 0 16px env(safe-area-inset-bottom);
   }
   button { font: inherit; color: inherit; cursor: pointer; border: 0; }
   .hidden { display: none !important; }
 
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { width: 44px; height: 44px; flex: none; }
+  .wordmark { font-family: var(--display); font-size: 30px; letter-spacing: -.02em; line-height: 1; }
+
+  /* Black top bar like the deck's: yellow on black. */
   header {
-    display: flex; align-items: center; gap: 14px; padding: 14px 0;
-    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 16px;
+    margin: 0 -16px; padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    background: var(--ink); color: var(--yellow);
   }
   .line-chip {
-    background: var(--text); color: var(--bg); font-weight: 800; font-size: 26px;
-    padding: 4px 16px; border-radius: 10px; min-width: 64px; text-align: center;
+    font-family: var(--display); font-size: 28px; color: var(--ink); background: var(--yellow);
+    padding: 4px 18px; border-radius: 12px; min-width: 64px; text-align: center;
   }
-  .title { font-weight: 600; color: var(--muted); }
+  .title { font-family: var(--mono); font-weight: 600; font-size: 15px; letter-spacing: .12em; text-transform: uppercase; }
   .spacer { flex: 1; }
-  .conn { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
-  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--bad); }
-  .conn.live .dot { background: var(--ok); }
-  .clock { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .conn { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 600; font-size: 14px;
+          letter-spacing: .08em; text-transform: uppercase; color: #fff; padding: 6px 12px; border-radius: 999px; border: 1px solid #ffffff40; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #ff5a6e; }
+  .conn.live .dot { background: #3ddc84; }
+  .clock { font-family: var(--mono); font-size: 28px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
 
-  main { padding: 18px 0 32px; display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
+  main { padding: 20px 0 32px; display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
 
   .empty {
     text-align: center; color: var(--muted); padding: 12vh 16px;
-    border: 2px dashed var(--line); border-radius: 20px;
+    border: 2px dashed var(--line); border-radius: 24px;
   }
-  .empty strong { display: block; color: var(--text); font-size: 30px; margin-bottom: 6px; }
+  .empty strong { display: block; color: var(--ink); font-family: var(--display); font-size: 36px; font-weight: 400; margin-bottom: 6px; }
 
   .card {
-    background: var(--panel); border-radius: 20px; padding: 22px 24px;
+    background: var(--paper); border: 2px solid var(--ink); border-radius: 24px; padding: 24px 26px;
     display: grid; grid-template-columns: 1fr auto; gap: 8px 20px; align-items: center;
-    border: 3px solid transparent;
   }
-  .card .kicker { font-size: 15px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-  .card .stop { font-size: clamp(30px, 6vw, 56px); font-weight: 800; line-height: 1.05; }
-  .card .who { font-size: 22px; font-weight: 600; }
-  .card .meta { color: var(--muted); font-size: 18px; }
-  .card .tip { color: var(--muted); font-size: 16px; margin-top: 6px; }
+  .card .kicker { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
+  .card .stop { font-family: var(--display); font-size: clamp(34px, 6.5vw, 64px); line-height: 1.02; letter-spacing: -.02em; }
+  .card .who { font-size: 22px; font-weight: 700; }
+  .card .meta { font-family: var(--mono); font-weight: 500; font-size: 17px; color: var(--muted); }
+  .card .tip { color: var(--muted); font-size: 17px; margin-top: 6px; }
   .card .body { display: grid; gap: 6px; min-width: 0; }
   .card .stop, .card .who { overflow-wrap: anywhere; }
 
-  .pickup.waiting { border-color: var(--alert); }
-  .pickup.waiting .kicker { color: var(--alert); }
-  .pickup.seen { border-color: var(--ok); }
-  .pickup.seen .kicker { color: var(--ok); }
-  .pickup.later { padding: 16px 22px; background: var(--panel-2); }
-  .pickup.later .stop { font-size: 30px; }
-  .stopreq { border-color: var(--stop); }
-  .stopreq .kicker { color: var(--stop); }
+  /* Next pickup: the whole card is bus-stop yellow. */
+  .pickup.waiting { background: var(--yellow); }
+  .pickup.waiting .kicker, .pickup.waiting .meta, .pickup.waiting .tip { color: var(--ink); }
+  .pickup.seen .kicker { color: var(--green); }
+  .pickup.later { padding: 18px 24px; background: var(--paper); border-color: var(--line); }
+  .pickup.later .stop { font-size: 32px; }
+  .pickup.later.waiting .kicker { color: var(--muted); }
+  /* Stop request: black card, yellow kicker, so it can't be mistaken for a pickup. */
+  .stopreq { background: var(--ink); color: #fff; }
+  .stopreq .kicker { color: var(--yellow); }
+  .stopreq .meta { color: #d6d3c8; }
 
   .btn {
-    min-width: 170px; min-height: 76px; padding: 0 24px; border-radius: 16px;
-    font-size: 24px; font-weight: 800;
+    min-width: 170px; min-height: 76px; padding: 0 26px; border-radius: 18px;
+    font-family: var(--display); font-size: 24px; letter-spacing: -.01em;
   }
-  .btn.primary { background: var(--alert); color: var(--alert-ink); }
-  .btn.quiet { background: var(--panel-2); border: 2px solid var(--line); }
+  .btn.primary { color: var(--yellow); background: var(--ink); }
+  .btn.quiet { color: var(--ink); background: var(--yellow); }
   .btn:active { transform: scale(.98); }
-  .done { color: var(--ok); font-weight: 800; font-size: 22px; text-align: right; }
+  .btn:focus-visible, .line-chip:focus-visible { outline: 4px solid var(--green); outline-offset: 3px; }
+  .done { color: var(--green); font-family: var(--display); font-size: 22px; text-align: right; }
 
   .flash { animation: flash 0.6s ease-in-out 4; }
-  @keyframes flash { 50% { background: #3a3000; } }
+  @keyframes flash { 50% { transform: scale(1.015); box-shadow: 0 0 0 8px var(--ink); } }
   @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
 
-  .setup {
-    position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; padding: 16px; z-index: 5;
-  }
-  .setup form { width: min(440px, 100%); display: grid; gap: 16px; }
-  .setup h1 { margin: 0; font-size: 34px; }
-  .setup p { margin: 0; color: var(--muted); }
-  .setup label { font-weight: 700; }
+  .setup { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px; background: var(--yellow); }
+  .setup form { width: min(460px, 100%); display: grid; gap: 16px; }
+  .setup .brand svg { width: 72px; height: 72px; }
+  .setup .brand svg { --logo-tile: var(--ink); --logo-ink: var(--yellow); }   /* inverted on the yellow screen */
+  .setup .wordmark { font-size: 56px; }
+  .setup h1 { margin: 8px 0 0; font-family: var(--mono); font-weight: 600; font-size: 18px; letter-spacing: .12em; text-transform: uppercase; }
+  .setup p { margin: 0; font-size: 20px; }
+  .setup label { font-family: var(--mono); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin-top: 8px; }
   .setup input {
-    font: inherit; font-size: 40px; font-weight: 800; text-align: center; width: 100%;
-    padding: 14px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel); color: var(--text);
+    font-family: var(--display); font-size: 44px; text-align: center; width: 100%;
+    padding: 14px; border-radius: 18px; border: 3px solid var(--ink); background: var(--paper); color: var(--ink);
   }
+  .setup input:focus { outline: 4px solid var(--green); outline-offset: 2px; }
   .setup .btn { width: 100%; }
-  .error { color: var(--bad); font-size: 16px; }
+  .error { color: var(--red); font-weight: 700; font-size: 17px; }
 
   @media (max-width: 640px) {
     .card { grid-template-columns: 1fr; }
     .btn { width: 100%; }
     .done { text-align: left; }
-    .clock { font-size: 22px; }
-    .title { display: none; }
+    .clock { font-size: 20px; }
+    header { gap: 10px; }
+    .conn { padding: 8px; }
+    /* Status stays readable for screen readers; the dot shows it at a glance. */
+    #connText { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .title, .wordmark-head { display: none; }
+    .brand svg { width: 38px; height: 38px; }
   }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="lotse-icon" viewBox="0 0 512 512">
+    <rect width="512" height="512" rx="114" style="fill: var(--logo-tile, #ffd400)"/>
+    <circle cx="256" cy="256" r="202" fill="none" stroke-opacity=".28" stroke-width="6" style="stroke: var(--logo-ink, #111110)"/>
+    <circle cx="256" cy="256" r="148" fill="none" stroke-opacity=".55" stroke-width="9" style="stroke: var(--logo-ink, #111110)"/>
+    <path d="M329.4 182.6 L263 328.5 L242.4 269.6 L183.5 249 Z" stroke-width="17.6" stroke-linejoin="round" style="fill: var(--logo-ink, #111110); stroke: var(--logo-ink, #111110)"/>
+  </symbol>
+</svg>
 
 <div class="setup" id="setup">
   <form id="setupForm">
+    <div class="brand" aria-label="Lotse" role="img"><svg aria-hidden="true"><use href="#lotse-icon"/></svg><span class="wordmark" aria-hidden="true">lotse</span></div>
     <h1>Driver screen</h1>
     <p>Shows passengers who need help boarding or want to get off, for your line.</p>
     <label for="lineInput">Line</label>
@@ -127,6 +160,7 @@
 </div>
 
 <header>
+  <div class="brand" aria-label="Lotse" role="img"><svg aria-hidden="true"><use href="#lotse-icon"/></svg><span class="wordmark wordmark-head" aria-hidden="true">lotse</span></div>
   <button class="line-chip" id="lineChip" aria-label="Change line">–</button>
   <span class="title">Driver screen</span>
   <span class="spacer"></span>

@@ -53,7 +53,7 @@ struct RiderView: View {
             .padding(16)
             .foregroundStyle(Palette.text)
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
         .sheet(isPresented: $showMarkers) {
             DebugView(pipeline: trip.pipeline)
                 .onAppear { trip.pipeline.camera.start() }
@@ -86,9 +86,18 @@ struct RiderView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if !trip.isRouteActive {
+                // App logo, only on the start screen so trips keep the space for guidance.
+                HStack(spacing: 10) {
+                    Image("LotseMark").resizable().frame(width: 36, height: 36)
+                    Text("lotse").font(.system(.title2, design: .rounded).weight(.bold))
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Lotse")
+            }
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 if trip.phase == .planning {
-                    ProgressView().tint(Palette.accent).controlSize(.large)
+                    ProgressView().tint(Palette.text).controlSize(.large)
                         .accessibilityHidden(true)
                 }
                 Text(trip.statusTitle)
@@ -107,7 +116,7 @@ struct RiderView: View {
                 Label("Waiting spot: \(g.clockHour) o'clock, \(g.distance, specifier: "%.1f") metres",
                       systemImage: "location.north.circle.fill")
                     .font(.title2.bold())
-                    .foregroundStyle(Palette.accent)
+                    .foregroundStyle(Palette.accentText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -171,12 +180,13 @@ struct RiderView: View {
                 }
                 .accessibilityHint("Say a destination, for example Getreidegasse. A two-finger double-tap also starts this.")
                 HStack(spacing: 10) {
-                    // Explicit colours: the screen is always black, the field always white.
-                    TextField("", text: $typed, prompt: Text("Or type a destination").foregroundStyle(Color(white: 0.35)))
+                    // Explicit colours: the screen is always light, the field always white with a black edge.
+                    TextField("", text: $typed, prompt: Text("Or type a destination").foregroundStyle(Palette.secondaryText))
                         .font(.title3.bold())
                         .padding(.horizontal, 14)
                         .frame(minHeight: 60)
                         .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.text, lineWidth: 2) }
                         .foregroundStyle(.black)
                         .tint(.black)
                         .accessibilityLabel("Destination")
@@ -239,7 +249,7 @@ struct RiderView: View {
             .accessibilityHint("Developer tools for testing.")
         }
         .padding(.horizontal, 6)
-        .background(scanning ? Color.black.opacity(0.7) : .clear, in: RoundedRectangle(cornerRadius: 12))
+        .background(scanning ? Color.white.opacity(0.85) : .clear, in: RoundedRectangle(cornerRadius: 12))
         // VoiceOver reaches the developer tools last.
         .accessibilitySortPriority(-1)
     }
@@ -254,24 +264,27 @@ struct RiderView: View {
 
 // MARK: - Palette
 
-/// Only high-contrast pairs: yellow or white on black (≈ 15:1 and 21:1), black on yellow, white on dark red (≈ 8:1).
+/// Light theme in the bus-stop colours of the deck. Only high-contrast pairs: black on cream or white
+/// (≈ 17:1), dark grey on cream (≈ 8:1), green on cream (≈ 6:1), black on yellow, white on dark red (≈ 8:1).
+/// Yellow is only ever a fill behind black text, never a text colour.
 private enum Palette {
-    static let background = Color.black
-    static let panel = Color(white: 0.11)
-    static let text = Color.white
-    static let secondaryText = Color(white: 0.82)
-    static let accent = Color(red: 1, green: 0.84, blue: 0.04)      // #FFD60A
+    static let background = Color(red: 0.953, green: 0.941, blue: 0.906)   // #F3F0E7
+    static let panel = Color.white
+    static let text = Color(red: 0.067, green: 0.067, blue: 0.063)        // #111110
+    static let secondaryText = Color(red: 0.29, green: 0.286, blue: 0.27)  // #4A4945
+    static let accent = Color(red: 1, green: 0.831, blue: 0)               // #FFD400
+    static let accentText = Color(red: 0, green: 0.42, blue: 0.22)         // #006B38
     static let danger = Color(red: 0.62, green: 0, blue: 0.1)
 }
 
 private extension View {
-    /// A dark rounded panel. Over the camera it's more opaque so text stays readable.
+    /// A white rounded panel. Over the camera it's slightly see-through but stays readable.
     func panel(over camera: Bool = false, highlighted: Bool = false) -> some View {
         padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(camera ? Color.black.opacity(0.8) : Palette.panel, in: RoundedRectangle(cornerRadius: 20))
+            .background(camera ? Color.white.opacity(0.9) : Palette.panel, in: RoundedRectangle(cornerRadius: 20))
             .overlay {
-                if highlighted { RoundedRectangle(cornerRadius: 20).strokeBorder(Palette.accent, lineWidth: 3) }
+                if highlighted { RoundedRectangle(cornerRadius: 20).strokeBorder(Palette.text, lineWidth: 3) }
             }
     }
 }
@@ -315,13 +328,13 @@ private struct BusCard: View {
                 if riding {
                     if let stopsToGo {
                         Text(stopsToGo <= 1 ? "Next stop is yours" : "\(stopsToGo) stops to go")
-                            .font(.title2.bold()).foregroundStyle(Palette.accent)
+                            .font(.title2.bold()).foregroundStyle(Palette.accentText)
                     }
                     Text("Get off at \(bus.alightingStop.spokenName)").font(.title3)
                 } else {
                     Text(stopLine).font(.title3)
                     if let departure {
-                        Text(departureLine(departure)).font(.title2.bold()).foregroundStyle(Palette.accent)
+                        Text(departureLine(departure)).font(.title2.bold()).foregroundStyle(Palette.accentText)
                     }
                 }
                 if bus.wheelchairAccessible == true {
@@ -454,11 +467,11 @@ private struct BigButton: View {
             .padding(.horizontal, 8)
             .background(background, in: RoundedRectangle(cornerRadius: 22))
             .overlay {
-                if style == .secondary {
+                if style != .danger {
                     RoundedRectangle(cornerRadius: 22).strokeBorder(Palette.text, lineWidth: 3)
                 }
             }
-            .foregroundStyle(style == .primary ? Color.black : Palette.text)
+            .foregroundStyle(style == .danger ? Color.white : Palette.text)
             .opacity(isEnabled ? 1 : 0.5)
             .contentShape(RoundedRectangle(cornerRadius: 22))
         }
