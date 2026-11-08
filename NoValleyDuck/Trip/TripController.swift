@@ -257,9 +257,13 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             await say("\(Self.readback(plan.destination)). Starting route.")
             await say(Self.summary(plan))
             guard phase == .planning else { return }          // stopped while speaking
+            if case .walk = legs.first {
+                // Nobody knows what the beeps mean unless we say it once.
+                speak("Follow the beacon sound: it comes from the direction to walk. A quick double beep means you're facing the right way, a chime means you passed a point on the route.")
+            }
             if head.isConnected {
                 needsCalibration = true
-                speak("To set the direction, hold your phone flat, pointing forward, and double-tap the screen. Or just start walking.")
+                speak("So the sound turns with your head, hold your phone flat in front of you, top edge pointing where you face, and tap Set direction. Or just start walking.")
             }
             beginLeg(0)
         } catch {

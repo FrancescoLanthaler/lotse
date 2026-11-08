@@ -82,7 +82,7 @@ struct RiderView: View {
         } else if trip.needsCalibration {
             VStack(spacing: 12) {
                 BigButton("Set direction", color: .blue) { trip.calibrate() }
-                    .accessibilityHint("Hold your phone flat, pointing forward, then double-tap.")
+                    .accessibilityHint("Hold your phone flat, top edge pointing where you face, then activate. This lines up the beacon sound with your AirPods.")
                 Button("Skip") { trip.skipCalibration() }.font(.title3)
             }
         } else if !trip.isRouteActive {
