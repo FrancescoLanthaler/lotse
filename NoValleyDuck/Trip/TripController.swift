@@ -602,10 +602,56 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         checkingBay = false
         if !exit { targetBayId = nil; spotBayId = nil }
         pipeline.requestedLine = nil
-        if UIApplication.shared.applicationState != .background {   // .inactive = screen on, e.g. an alert
-            beginCameraScan()
-        } else {
-            askToUnlock()
+        // Most stops have no markers yet: check the backend first, so the rider isn't asked to
+        // scan for something that isn't there.
+        let place = exit ? bus?.alightingStop : bus?.boardingStop
+        Task {
+            let (ctx, hasMarkers) = await markerContext(near: place)
+            guard phase == .scanning(exit: exit) else { return }
+            if !exit, let ctx { stopContext = ctx }
+            guard hasMarkers else { noScan(exit: exit, reason: "This stop has no markers"); return }
+            if UIApplication.shared.applicationState != .background {   // .inactive = screen on, e.g. an alert
+                beginCameraScan()
+            } else {
+                askToUnlock()
+            }
+        }
+    }
+
+    /// The backend stop at `place` (or the demo stop), preferring one with bay markers.
+    private func markerContext(near place: Place?) async -> (StopContext?, Bool) {
+        func hasBays(_ c: StopContext) -> Bool { c.markers.values.contains { $0.kind != .vehicle } }
+        if pipeline.location.demoOverride || place == nil {
+            return (pipeline.stop, pipeline.stop.map(hasBays) ?? false)
+        }
+        let c = place!.coordinate.clCoordinate
+        let here = CLLocation(latitude: c.latitude, longitude: c.longitude)
+        let stops = await pipeline.repository.stops(near: c, radius: 80)
+            .filter { $0.location.distance(from: here) <= 80 }
+            .sorted { $0.location.distance(from: here) < $1.location.distance(from: here) }
+        var nearest: StopContext?
+        for s in stops.prefix(5) {
+            let ctx = await pipeline.repository.context(for: s)
+            if hasBays(ctx) { return (ctx, true) }
+            if nearest == nil { nearest = ctx }
+        }
+        return (nearest, false)
+    }
+
+    /// No marker scan possible (none at this stop, or none found): carry on without the waiting spot.
+    private func noScan(exit: Bool, reason: String) {
+        log.info("no scan: \(reason, privacy: .public)")
+        if exit {
+            exitScanDone()
+            return
+        }
+        phase = .waiting
+        setCamera(false)
+        spotGuidance = nil
+        Task {
+            await say("\(reason), so I can't guide you to the exact waiting spot. Wait at the stop for \(busName.lowercased()). I'll ask you before it comes.")
+            guard phase == .waiting else { return }
+            await setupDeparture()
         }
     }
 
@@ -661,6 +707,8 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         if case .scanning(exit: true) = phase, now.timeIntervalSince(scanStarted) >= 60 {
             speak("No stop marker found. Starting the walk anyway.")
             exitScanDone()
+        } else if case .scanning(exit: false) = phase, now.timeIntervalSince(scanStarted) >= 120, !checkingBay {
+            noScan(exit: false, reason: "I couldn't find a stop marker")
         }
     }
 
