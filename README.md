@@ -43,8 +43,9 @@ Re-run the import weekly, because timetables cover 14 days from the import date.
 ```sh
 python3 tools/make_markers.py                    # PDF of every marker in PocketBase, labelled (A4)
 python3 tools/make_markers.py 0 1 25 --paper a3  # specific IDs
-python3 tools/assign_marker.py bays "Salzburg Mirabellplatz"           # find bay labels
+python3 tools/assign_marker.py bays "Salzburg Mirabellplatz"           # bay labels/ids + directions
 python3 tools/assign_marker.py bay "Salzburg Mirabellplatz" A 0 --size 0.145
+python3 tools/assign_marker.py bay "Salzburg Messe" b09a9cc04f09183 0 --size 0.145   # unlabelled bay: by id
 python3 tools/assign_marker.py door 120 25 --size 0.145                # bus door, line 120
 python3 tools/assign_marker.py size 0 0.148 --stop "Salzburg Hauptbahnhof"   # after measuring
 python3 tools/assign_marker.py list
@@ -55,6 +56,8 @@ python3 tools/assign_marker.py list
    be as accurate as that number.
 3. Changes to the demo stop or the bus doors also update the bundled `DemoStop.json`, so rebuild the app afterwards.
 4. Re-running the import never overwrites assigned markers or their sizes.
+5. A marker only counts at the stop it is assigned to. At any other stop the debug view draws it
+   red ("not here") and the app ignores it without a word: that is the safety filter, not a bug.
 
 **Hall tests** (spec, run before building UI): in the debug view, switch on *Record hall test (CSV)*.
 Each processed frame becomes CSV rows: `t_s, frame, stop, id, hamming, margin, side_px, status,
@@ -65,6 +68,23 @@ Finder (iPhone → Files → NoValleyDuck), from the Files app, or with the shar
 * **Range:** walk away in 1 m steps and see where `margin` drops and the rows stop.
 * **Margin threshold:** pick `minMargin` above the margins of weak or false rows, and below the margins
   of real markers at the range you need. Then set it as the default in `MarkerPipeline.minMargin`.
+
+## Driver screen
+
+`driver/index.html` is a single static page for the bus driver (tablet or phone in the cab). The
+driver picks a line and sees, live, every pickup request (`requests`) and stop request (`facts`,
+`key = stop_requested`) on that line, with a chime. *Seen* sets the request's status to `seen`.
+No login, no build step.
+
+Deploy: copy the folder into PocketBase's public dir, then open `/driver/?line=1`:
+
+```sh
+scp -r driver <server>:<pocketbase dir>/pb_public/
+# → https://novalleyduck.novafox.at/driver/?line=1
+```
+
+It also works opened straight from disk or any web server (it then talks to the default PocketBase;
+override with `?pb=https://…`).
 
 ## Credits
 
