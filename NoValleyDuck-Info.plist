@@ -7,6 +7,9 @@
 		<string>audio</string>
 		<string>location</string>
 	</array>
+	<!-- Siri starts a trip in the background; the Live Activity shows it on the lock screen. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 </dict>

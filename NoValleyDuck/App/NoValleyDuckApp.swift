@@ -5,6 +5,10 @@ struct NoValleyDuckApp: App {
     @State private var trip = TripController.shared
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        StopTripLiveActivityIntent.handler = { TripController.shared.stop(); TripLiveActivity.endAll() }
+    }
+
     var body: some Scene {
         WindowGroup {
             RiderView(trip: trip)

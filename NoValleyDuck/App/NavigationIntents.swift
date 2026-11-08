@@ -3,39 +3,31 @@ import AppIntents
 struct StartNavigationIntent: AppIntent {
     static var title: LocalizedStringResource = "Navigate"
     static var description = IntentDescription("Plans a walk and bus trip to a destination and guides you there by sound.")
+    // iOS refuses to start a Live Activity from a background intent, and a background-run app has no
+    // window to close. So the app opens, starts the activity, and the rider can leave or lock the phone.
     static var openAppWhenRun = true
 
-    // Optional on purpose: Siri's own "Where to?" is often only shown, not spoken (Siri response
-    // settings, typed requests), and its dictation is worse at German place names. Without a
-    // destination the app asks out loud itself, with its own recognisers (see askDestination).
-    @Parameter(title: "Destination")
-    var destination: DestinationEntity?
+    // Required, so Siri asks "Where to?" itself and the trip starts as soon as it has the answer.
+    @Parameter(title: "Destination", requestValueDialog: "Where to?")
+    var destination: String
 
     static var parameterSummary: some ParameterSummary {
         Summary("Navigate to \(\.$destination)")
     }
 
     @MainActor
-    func perform() async throws -> some IntentResult {
+    func perform() async throws -> some IntentResult & ProvidesDialog {
         let trip = TripController.shared
         Task { await trip.setup() }       // camera and stop data; not needed to start walking
-        if let destination {
-            trip.start(destination: destination.name)
-        } else {
-            Task {
-                // HACK: let Siri finish and release the mic and audio before asking.
-                try? await Task.sleep(for: .seconds(1.2))
-                await trip.askDestination()
-            }
-        }
-        return .result()
+        trip.start(destination: destination)
+        return .result(dialog: "Guiding you to \(destination).")
     }
 }
 
 struct StopNavigationIntent: AppIntent {
     static var title: LocalizedStringResource = "Stop Guiding"
     static var description = IntentDescription("Stops spoken guidance.")
-    static var openAppWhenRun = true
+    static var openAppWhenRun = false
 
     @MainActor
     func perform() async throws -> some IntentResult {

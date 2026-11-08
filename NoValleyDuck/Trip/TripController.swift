@@ -25,7 +25,10 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         case arrived
     }
 
-    private(set) var phase: Phase = .idle
+    private(set) var phase: Phase = .idle { didSet { updateLiveActivity() } }
+    @ObservationIgnored private var requestedDestination: String?
+    @ObservationIgnored private var walkRemaining: Double?       // metres left on the walk, for the Live Activity
+    @ObservationIgnored private var walkTurn: (name: String, meters: Double)?
     private(set) var lastSpoken = ""
     private(set) var plan: NavigationPlan?
     private(set) var needsCalibration = false
@@ -57,7 +60,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
     // Legs (a copy of the plan's, so redirects and re-plans can replace them)
     @ObservationIgnored private(set) var legs: [Leg] = []
-    @ObservationIgnored private(set) var legIndex = 0
+    @ObservationIgnored private(set) var legIndex = 0 { didSet { updateLiveActivity() } }
 
     // Walking
     @ObservationIgnored private(set) var checkpoints: [Checkpoint] = []
@@ -100,7 +103,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
     // Riding
     @ObservationIgnored private var rideStops: [Place] = []
-    @ObservationIgnored private var reachedStop = -1
+    @ObservationIgnored private var reachedStop = -1 { didSet { updateLiveActivity() } }
     @ObservationIgnored private var askedStopRequest = false
     @ObservationIgnored private var nearExitSince: Date?
 
@@ -134,6 +137,68 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             "Waiting for \(busName.lowercased())" + (departure.map { ", due \($0.formatted(date: .omitted, time: .shortened))" } ?? "")
         case .riding: "On \(busName.lowercased())"
         case .arrived: "Arrived at \(plan?.destination.spokenName ?? "your destination")"
+        }
+    }
+
+    private func updateLiveActivity() {
+        var state = TripActivityAttributes.ContentState(
+            status: statusTitle, symbol: TripLiveActivity.symbol(phase), headline: statusTitle)
+        switch phase {
+        case .walking:
+            if case .walk(let w)? = legs[safe: legIndex] {
+                let target = w.to.spokenName
+                state.headline = walkTurn.map { "Turn \($0.name)" } ?? "Continue to \(target)"
+                state.symbol = walkTurn.map { Self.turnSymbol($0.name) } ?? "arrow.up"
+                state.distanceMeters = (walkTurn?.meters ?? walkRemaining).map { Int(($0 / 10).rounded()) * 10 }
+                state.totalMeters = walkRemaining.map { Int(($0 / 10).rounded()) * 10 }
+                if let r = walkRemaining, w.distanceMeters > 0 { state.progress = min(1, max(0, 1 - r / w.distanceMeters)) }
+            }
+        case .waiting:
+            state.headline = [bus?.line.map { "Bus \($0)" }, bus?.direction.map { "to \($0)" }]
+                .compactMap { $0 }.joined(separator: " ")
+            state.time = departure
+            state.timeLabel = "Departs"
+        case .riding:
+            let next = reachedStop + 1
+            if next < rideStops.count {
+                state.headline = "Next stop: \(rideStops[next].spokenName)"
+                state.progress = Double(next) / Double(rideStops.count)
+                let left = rideStops.count - next
+                state.status = "\(left) stop\(left == 1 ? "" : "s") to go"
+            }
+        default: break
+        }
+        state.eta = etaAtDestination()
+        TripLiveActivity.update(phase: phase, destination: plan?.destination.spokenName ?? requestedDestination,
+                                state: state)
+    }
+
+    /// Arrival at the destination: this leg's remaining time, then the bus timetable and later walks.
+    private func etaAtDestination() -> Date? {
+        guard legIndex < legs.count else { return nil }
+        var t: Date?
+        if phase == .walking, case .walk(let w) = legs[legIndex], let r = walkRemaining {
+            t = now.addingTimeInterval(r / 1.3)     // HACK: 1.3 m/s walking speed
+            _ = w
+        } else if case .bus(let b) = legs[legIndex] {
+            t = b.estimate?.expectedArrival
+        }
+        for leg in legs[(legIndex + 1)...] {
+            switch leg {
+            case .bus(let b): t = b.estimate?.expectedArrival ?? t
+            case .walk(let w): t = t?.addingTimeInterval(w.expectedTravelTimeSeconds)
+            }
+        }
+        return t
+    }
+
+    private static func turnSymbol(_ turn: String) -> String {
+        switch turn {
+        case "slight left": "arrow.up.left"
+        case "slight right": "arrow.up.right"
+        case let t where t.contains("left"): "arrow.turn.up.left"
+        case let t where t.contains("right"): "arrow.turn.up.right"
+        default: "arrow.up"
         }
     }
 
@@ -238,8 +303,9 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             fallbacks.append(f)
         }
         guard !isRouteActive else { speak("A route is already running. Stop it first."); return }
+        requestedDestination = destination
+        plan = nil          // before phase: its didSet reads plan for the Live Activity title
         phase = .planning
-        plan = nil
         beginSession()
         Task { await planRoute(to: destination, fallbacks: fallbacks) }
     }
@@ -422,6 +488,7 @@ final class TripController: NSObject, CLLocationManagerDelegate {
         announcedTurns = []
         offRouteSince = nil
         lastDistanceUpdate = nil
+        walkRemaining = nil; walkTurn = nil
         weakFixSince = nil
         warnedWeakFix = false
         log.info("walk to \(w.to.name, privacy: .public): \(self.checkpoints.count) checkpoints")
@@ -530,6 +597,17 @@ final class TripController: NSObject, CLLocationManagerDelegate {
             }
         } else {
             lastDistanceUpdate = (now, remaining)
+        }
+
+        // Live Activity: only when the 10 m rounded distances or the next turn change.
+        let turn = (checkpointIndex...last).first(where: { checkpoints[$0].turn != nil }).flatMap { k in
+            checkpoints[k].turn.map { (name: $0, meters: checkpoints[k].coordinate.distance(to: p)) }
+        }
+        if walkTurn?.name != turn?.name || walkTurn.map({ Int($0.meters / 10) }) != turn.map({ Int($0.meters / 10) })
+            || walkRemaining.map({ Int($0 / 10) }) != Int(remaining / 10) {
+            walkRemaining = remaining
+            walkTurn = turn
+            updateLiveActivity()
         }
 
         // Off route: more than 30 m from the path for 10 s → recalculate.
@@ -686,6 +764,8 @@ final class TripController: NSObject, CLLocationManagerDelegate {
 
     /// App came to the front (e.g. the user unlocked the phone to scan).
     func becameActive() {
+        // iOS only allows starting a Live Activity in the foreground; a Siri start in the background retries here.
+        if isRouteActive { updateLiveActivity() }
         if needsCamera { beginCameraScan() }
     }
 
