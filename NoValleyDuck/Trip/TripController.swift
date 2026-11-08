@@ -53,12 +53,12 @@ final class TripController: NSObject, CLLocationManagerDelegate {
     @ObservationIgnored private var simulating = false
 
     // Legs (a copy of the plan's, so redirects and re-plans can replace them)
-    @ObservationIgnored private var legs: [Leg] = []
-    @ObservationIgnored private var legIndex = 0
+    @ObservationIgnored private(set) var legs: [Leg] = []
+    @ObservationIgnored private(set) var legIndex = 0
 
     // Walking
-    @ObservationIgnored private var checkpoints: [Checkpoint] = []
-    @ObservationIgnored private var checkpointIndex = 0
+    @ObservationIgnored private(set) var checkpoints: [Checkpoint] = []
+    @ObservationIgnored private(set) var checkpointIndex = 0
     @ObservationIgnored private var announcedTurns: Set<Int> = []
     @ObservationIgnored private var offRouteSince: Date?
     @ObservationIgnored private var lastDistanceUpdate: (at: Date, remaining: Double)?

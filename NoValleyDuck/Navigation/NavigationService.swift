@@ -165,13 +165,13 @@ final class NavigationService {
         request.resultTypes = [.address, .pointOfInterest]
         request.region = MKCoordinateRegion(center: center.clCoordinate,
                                             latitudinalMeters: 50_000, longitudinalMeters: 50_000)
-        let response: MKLocalSearch.Response
-        do {
+        // One retry: on a weak connection the first search often times out.
+        var response: MKLocalSearch.Response?
+        for _ in 0..<2 where response == nil {
             apiLog("MapKit MKLocalSearch: \"\(query)\"")
-            response = try await MKLocalSearch(request: request).start()
-        } catch {
-            throw NavigationError.destinationNotFound(query)
+            response = try? await MKLocalSearch(request: request).start()
         }
+        guard let response else { throw NavigationError.destinationNotFound(query) }
         // The region is only a hint: a misheard name can match a place in London. Stay near the rider.
         guard let item = response.mapItems.first(where: {
             Coordinate($0.placemark.coordinate).distance(to: center) <= 50_000

@@ -7,6 +7,7 @@ struct RiderView: View {
     @State private var typed = ""
     @State private var showMarkers = false
     @State private var showRouteTest = false
+    @AppStorage("showRouteMap") private var showMap = false
     @AccessibilityFocusState private var promptFocused: Bool
 
     private var scanning: Bool {
@@ -25,7 +26,13 @@ struct RiderView: View {
             }
             VStack(spacing: 16) {
                 header
-                Spacer(minLength: 0)
+                if showMap && !scanning {
+                    RouteMapView(trip: trip)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .frame(maxHeight: .infinity)
+                } else {
+                    Spacer(minLength: 0)
+                }
                 mainAction
                 footer
             }
@@ -120,6 +127,7 @@ struct RiderView: View {
                         set: { trip.pipeline.location.setDemoOverride($0) }))
                     Button("Marker debug view") { showMarkers = true }
                     Button("Route test") { showRouteTest = true }
+                    Toggle("Show route map", isOn: $showMap)
                 } label: {
                     Label("Debug", systemImage: "ladybug").font(.title3)
                 }
